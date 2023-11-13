@@ -40,7 +40,7 @@ fn handle_state(state: Arc<Mutex<DQState>>) {
                 for (_, table) in state.get_tables() {
                     let time0 = Instant::now();
 
-                    table.update().await;
+                    let _ = table.update().await;
 
                     log::info!("updated for {} milliseconds", time0.elapsed().as_millis());
                 }

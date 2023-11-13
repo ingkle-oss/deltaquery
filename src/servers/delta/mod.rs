@@ -1,12 +1,10 @@
 use crate::commons::flight;
 use crate::commons::sql;
 use crate::error::DQError;
-use crate::metadata::{DQMetadataKey, DQMetadataValue};
 use crate::servers::FetchResults;
 use crate::state::DQState;
 use arrow_array::RecordBatch;
 use arrow_flight::encode::FlightDataEncoderBuilder;
-use arrow_flight::sql::client::FlightSqlServiceClient;
 use arrow_flight::sql::metadata::{SqlInfoData, SqlInfoDataBuilder};
 use arrow_flight::sql::server::PeekableFlightDataStream;
 use arrow_flight::sql::{
@@ -24,15 +22,11 @@ use arrow_flight::sql::{
 };
 use arrow_flight::{
     flight_service_server::FlightService, Action, FlightData, FlightDescriptor, FlightEndpoint,
-    FlightInfo, HandshakeRequest, HandshakeResponse, IpcMessage, Location, Ticket,
+    FlightInfo, HandshakeRequest, HandshakeResponse, Location, Ticket,
 };
 use arrow_ipc::CompressionType;
-use arrow_schema::{DataType, Schema};
-use async_std::stream::StreamExt;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use duckdb::{params, Connection};
-use futures::stream::FuturesOrdered;
 use futures::{stream, Stream, TryStreamExt};
 use once_cell::sync::Lazy;
 use prost::Message;
@@ -41,9 +35,8 @@ use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::transport::{Channel, Endpoint};
 use tonic::{Request, Response, Status, Streaming};
 use uuid::Uuid;
 

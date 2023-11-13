@@ -4,8 +4,6 @@ use arrow_flight::{FlightData, SchemaAsIpc};
 use arrow_ipc::writer::{DictionaryTracker, IpcDataGenerator, IpcWriteOptions};
 use arrow_ipc::{CompressionType, MetadataVersion};
 use arrow_schema::Schema;
-use arrow_select::concat::concat_batches;
-use std::sync::Arc;
 
 pub fn batches_to_flight_data(
     schema: &Schema,

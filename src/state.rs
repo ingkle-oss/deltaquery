@@ -1,4 +1,4 @@
-use crate::configs::{DQConfig, DQTableConfig};
+use crate::configs::DQConfig;
 use crate::table::DQTable;
 use crate::tables::polars::DQPolarsTable;
 use std::collections::hash_map::IterMut;
@@ -37,7 +37,7 @@ impl DQState {
                 let mut table: Box<dyn DQTable> = match table_config.repository.as_str() {
                     _ => Box::new(DQPolarsTable::new(table_config, filesystem_config, self).await),
                 };
-                table.update().await;
+                let _ = table.update().await;
 
                 self.tables.insert(target.clone(), table);
             }

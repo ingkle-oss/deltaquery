@@ -51,7 +51,6 @@ pub struct DQPolarsTable {
     files: HashMap<String, DQPolarsFile>,
 
     engine: Arc<Mutex<Connection>>,
-    options: HashMap<String, String>,
 }
 
 impl DQPolarsTable {
@@ -116,7 +115,6 @@ impl DQPolarsTable {
             files: HashMap::new(),
             stats: DataFrame::default(),
             engine: Arc::new(Mutex::new(engine)),
-            options,
         }
     }
 
