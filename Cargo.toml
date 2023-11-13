@@ -43,5 +43,5 @@ prost = { version = "0.12.1", default-features = false, features = ["prost-deriv
 tonic = { version = "0.10.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "gzip"] }
 polars = { version = "0.33.2", features = ["lazy", "json"] }
 duckdb = { git = "https://github.com/duckdb/duckdb-rs", branch = "dependabot/cargo/main/arrow-48", features = ["bundled", "parquet", "httpfs", "appender-arrow"] }
-deltalake = { git = "https://github.com/haruband/delta-rs", branch = "deltasync", features = ["default", "datafusion", "s3"] }
+deltalake = { git = "https://github.com/delta-io/delta-rs", features = ["default", "datafusion", "s3"] }
 sqlparser = { version = "0.39", features = ["bigdecimal", "serde", "visitor"] }
