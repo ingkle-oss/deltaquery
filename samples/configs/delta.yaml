@@ -1,0 +1,26 @@
+version: 1
+server: "delta"
+listen: "0.0.0.0:32010"
+endpoint: "grpc://127.0.0.1:32010"
+compression: "zstd"
+filesystems:
+  - name: "minio"
+    configs:
+      AWS_ENDPOINT_URL: "http://127.0.0.1:9000"
+      AWS_REGION: "ap-northeast-2"
+      AWS_ACCESS_KEY_ID: "haruband"
+      AWS_SECRET_ACCESS_KEY: "haru1004"
+      AWS_S3_ALLOW_UNSAFE_RENAME: "true"
+      AWS_ALLOW_HTTP: "true"
+tables:
+  - name: "delta.default.test0"
+    repository: "polars"
+    filesystem: "minio"
+    location: "s3://delta/"
+    predicates: "date,hour"
+    useVersioning: false
+  - name: "delta.default.local"
+    repository: "polars"
+    location: "file:///Users/haruband/Documents/deltaquery/samples/samples/delta/"
+    predicates: "date,hour"
+    useVersioning: false

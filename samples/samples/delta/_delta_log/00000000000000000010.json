@@ -1,0 +1,3 @@
+{"txn":{"appId":"deltasync-test0/0","version":872637,"lastUpdated":1699430446133}}
+{"add":{"path":"date=2023-11-08/hour=08/part-00000-af62fded-046c-47ef-a759-ade9c5fe2e5c-c000.snappy.parquet","size":4219,"partitionValues":{"hour":"08","date":"2023-11-08"},"modificationTime":1699430446131,"dataChange":true,"stats":null}}
+{"commitInfo":{"timestamp":1699430446133,"operation":"STREAMING UPDATE","operationParameters":{"epochId":"1699430446133","outputMode":"Append","queryId":"deltasync"},"clientVersion":"delta-rs.0.17.0"}}

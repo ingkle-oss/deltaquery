@@ -1,0 +1,47 @@
+[package]
+name = "deltaquery"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["examples/flight_sql"]
+
+[dependencies]
+clap = { version = "4", features = ["cargo", "derive"] }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0", features = ["fs"] }
+tokio-util = "0.6.3"
+log = "0"
+env_logger = "0.9.3"
+async-trait = "0.1"
+async-std = { version = "1.12.0", features = ["attributes"] }
+async-recursion = "1.0.4"
+async-channel = "1.9.0"
+thiserror = "1"
+signal-hook = "0.3.15"
+anyhow = "1"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+chrono = "0"
+chrono-tz = "0.8.3"
+arrow = { version = "48", features = ["prettyprint", "ffi"] }
+arrow-array = { version = "48" }
+arrow-cast = { version = "48", features = ["prettyprint"] }
+arrow-schema = { version = "48" }
+arrow-select = { version = "48" }
+arrow-ipc = { version = "48", features = ["zstd"] }
+arrow-flight = { version = "48", features = ["flight-sql-experimental"] }
+base64 = { version = "0.21", default-features = false, features = ["std"] }
+bytes = { version = "1", default-features = false }
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+once_cell = { version = "1" }
+paste = { version = "1.0" }
+url = "2.3"
+uuid = { version = "0.8", features = ["serde", "v4"] }
+prost = { version = "0.12.1", default-features = false, features = ["prost-derive"] }
+tonic = { version = "0.10.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "gzip"] }
+polars = { version = "0.33.2", features = ["lazy", "json"] }
+duckdb = { git = "https://github.com/duckdb/duckdb-rs", branch = "dependabot/cargo/main/arrow-48", features = ["bundled", "parquet", "httpfs", "appender-arrow"] }
+deltalake = { git = "https://github.com/haruband/delta-rs", branch = "deltasync", features = ["default", "datafusion", "s3"] }
+sqlparser = { version = "0.39", features = ["bigdecimal", "serde", "visitor"] }

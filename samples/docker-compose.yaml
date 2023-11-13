@@ -1,0 +1,47 @@
+version: "3.8"
+services:
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server --console-address ":9001" /data
+    environment:
+      MINIO_ROOT_USER: haruband
+      MINIO_ROOT_PASSWORD: haru1004
+    ports:
+      - 9000:9000
+      - 9001:9001
+  minio_init:
+    image: minio/mc
+    restart: on-failure
+    volumes:
+      - ./samples:/opt/samples
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -ce "
+      /usr/bin/mc config host add minio http://minio:9000 haruband haru1004;
+      /usr/bin/mc mb minio/delta;
+      /usr/bin/mc cp --recursive /opt/samples/delta/ minio/delta;
+      exit 0;
+      "
+
+  trino:
+    image: trinodb/trino
+    container_name: trino
+    restart: always
+    ports:
+      - 38080:8080
+    volumes:
+      - ./trino/config.properties:/etc/trino/config.properties
+      - ./trino/delta.properties:/etc/trino/catalog/delta.properties
+  trino_init:
+    image: trinodb/trino
+    restart: on-failure
+    depends_on:
+      - trino
+    entrypoint: >
+      /bin/sh -ce "
+      trino --server trino:8080 --catalog delta --execute \"create schema if not exists delta.default\";
+      trino --server trino:8080 --catalog delta --execute \"create table if not exists delta.default.test0 (timestamp BIGINT, date VARCHAR, hour VARCHAR, name VARCHAR, company VARCHAR, score INTEGER) with (location = 's3://delta/', partitioned_by = array['date', 'hour'])\";
+      exit 0;
+      "
