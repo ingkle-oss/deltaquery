@@ -26,6 +26,7 @@ mod predicates;
 const STATS_TABLE_ADD_PATH: &str = "__path__";
 const STATS_TABLE_CHUNKS_MAX: usize = 16;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct DQPolarsFile {
     add: Add,

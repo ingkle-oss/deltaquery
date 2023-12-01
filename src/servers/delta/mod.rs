@@ -113,6 +113,7 @@ impl FlightSqlServiceDelta {
         let payload = BASE64_STANDARD.decode(&authorization[basic.len()..])?;
         let payload = String::from_utf8(payload)?;
         let tokens: Vec<_> = payload.split(':').collect();
+        #[allow(unused_variables)]
         let (username, password) = match tokens.as_slice() {
             [username, password] => (username, password),
             _ => (&"none", &"none"),
@@ -161,6 +162,7 @@ impl FlightSqlService for FlightSqlServiceDelta {
         let payload =
             String::from_utf8(payload).map_err(|e| status!("Authorization not parsable", e))?;
         let tokens: Vec<_> = payload.split(':').collect();
+        #[allow(unused_variables)]
         let (username, password) = match tokens.as_slice() {
             [username, password] => (username, password),
             _ => Err(Status::invalid_argument(

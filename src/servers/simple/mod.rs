@@ -48,8 +48,6 @@ macro_rules! status {
 
 const SIMPLE_TOKEN: &str = "simple_token";
 const SIMPLE_HANDLE: &str = "simple_handle";
-const SIMPLE_USERNAME: &str = "admin";
-const SIMPLE_PASSWORD: &str = "admin";
 const SIMPLE_UPDATE_RESULT: i64 = 1;
 
 static SIMPLE_SQL_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
@@ -103,6 +101,7 @@ impl FlightSqlServiceSimple {
         let payload = BASE64_STANDARD.decode(&authorization[basic.len()..])?;
         let payload = String::from_utf8(payload)?;
         let tokens: Vec<_> = payload.split(':').collect();
+        #[allow(unused_variables)]
         let (username, password) = match tokens.as_slice() {
             [username, password] => (username, password),
             _ => (&"none", &"none"),
@@ -146,21 +145,19 @@ impl FlightSqlService for FlightSqlServiceSimple {
                 "Auth type not implemented: {authorization}"
             )))?;
         }
-        let base64 = &authorization[basic.len()..];
-        let bytes = BASE64_STANDARD
-            .decode(base64)
+        let payload = BASE64_STANDARD
+            .decode(&authorization[basic.len()..])
             .map_err(|e| status!("Authorization not decodable", e))?;
-        let str = String::from_utf8(bytes).map_err(|e| status!("Authorization not parsable", e))?;
-        let parts: Vec<_> = str.split(':').collect();
-        let (user, pass) = match parts.as_slice() {
-            [user, pass] => (user, pass),
+        let payload =
+            String::from_utf8(payload).map_err(|e| status!("Authorization not parsable", e))?;
+        let tokens: Vec<_> = payload.split(':').collect();
+        #[allow(unused_variables)]
+        let (username, password) = match tokens.as_slice() {
+            [username, password] => (username, password),
             _ => Err(Status::invalid_argument(
                 "Invalid authorization header".to_string(),
             ))?,
         };
-        if user != &SIMPLE_USERNAME || pass != &SIMPLE_PASSWORD {
-            Err(Status::unauthenticated("Invalid credentials"))?
-        }
 
         let result = HandshakeResponse {
             protocol_version: 0,
