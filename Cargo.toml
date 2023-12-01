@@ -44,4 +44,4 @@ tonic = { version = "0.10.0", default-features = false, features = ["transport",
 polars = { version = "0.33.2", features = ["lazy", "json"] }
 duckdb = { git = "https://github.com/duckdb/duckdb-rs", branch = "dependabot/cargo/main/arrow-48", features = ["bundled", "parquet", "httpfs", "appender-arrow"] }
 deltalake = { git = "https://github.com/delta-io/delta-rs", features = ["default", "datafusion", "s3"] }
-sqlparser = { version = "0.39", features = ["bigdecimal", "serde", "visitor"] }
+sqlparser = { version = "0.39", features = ["serde", "visitor"] }

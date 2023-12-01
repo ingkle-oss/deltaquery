@@ -90,7 +90,13 @@ pub fn parse_expression(
             }
         }
         Expr::Value(value) => match value {
-            Value::Number(v, ..) => lit(v.digits()),
+            Value::Number(n, l) => {
+                if *l {
+                    lit(n.parse::<i64>().unwrap())
+                } else {
+                    lit(n.parse::<i32>().unwrap())
+                }
+            }
             Value::SingleQuotedString(s) => lit(s.clone()),
             _ => unimplemented!(),
         },
