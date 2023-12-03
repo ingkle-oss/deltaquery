@@ -20,8 +20,9 @@ services:
     entrypoint: >
       /bin/sh -ce "
       /usr/bin/mc config host add minio http://minio:9000 haruband haru1004;
-      /usr/bin/mc mb minio/delta;
-      /usr/bin/mc cp --recursive /opt/samples/delta/ minio/delta;
+      /usr/bin/mc mb minio/test0;
+      /usr/bin/mc mb minio/test1;
+      /usr/bin/mc cp --recursive /opt/samples/delta/ minio/test0;
       exit 0;
       "
 
@@ -42,6 +43,7 @@ services:
     entrypoint: >
       /bin/sh -ce "
       trino --server trino:8080 --catalog delta --execute \"create schema if not exists delta.default\";
-      trino --server trino:8080 --catalog delta --execute \"create table if not exists delta.default.test0 (timestamp BIGINT, date VARCHAR, hour VARCHAR, name VARCHAR, company VARCHAR, score INTEGER) with (location = 's3://delta/', partitioned_by = array['date', 'hour'])\";
+      trino --server trino:8080 --catalog delta --execute \"create table if not exists delta.default.test0 (timestamp BIGINT, date VARCHAR, hour VARCHAR, name VARCHAR, company VARCHAR, score INTEGER) with (location = 's3://test0/', partitioned_by = array['date', 'hour'])\";
+      trino --server trino:8080 --catalog delta --execute \"create table if not exists delta.default.test1 (timestamp BIGINT, date VARCHAR, hour VARCHAR, name VARCHAR, company VARCHAR, score INTEGER) with (location = 's3://test1/', partitioned_by = array['date', 'hour'])\";
       exit 0;
       "

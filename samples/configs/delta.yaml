@@ -19,6 +19,16 @@ tables:
     location: "s3://delta/"
     predicates: "date,hour"
     useVersioning: false
+  - name: "delta.default.cache"
+    repository: "polars"
+    filesystem: "minio"
+    location: "s3://delta/"
+    predicates: "date,hour"
+    useVersioning: false
+    useParquetCaching: true
+    cachingLocation: "/tmp/deltaquery"
+    cachingRetention: 5s
+    cachingCodec: "zstd"
   - name: "delta.default.local"
     repository: "polars"
     location: "file:///Users/haruband/Documents/deltaquery/samples/samples/delta/"
