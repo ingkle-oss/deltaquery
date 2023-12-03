@@ -46,3 +46,6 @@ polars = { version = "0.33.2", features = ["lazy", "json"] }
 duckdb = { git = "https://github.com/haruband/duckdb-rs", branch = "deltaquery", features = ["bundled", "parquet", "httpfs", "appender-arrow"] }
 deltalake = { git = "https://github.com/delta-io/delta-rs", features = ["default", "datafusion", "s3"] }
 sqlparser = { version = "0.39", features = ["serde", "visitor"] }
+
+[dev-dependencies]
+fake = "2.6"
