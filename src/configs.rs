@@ -20,7 +20,7 @@ pub struct DQTableConfig {
     pub use_record_caching: Option<bool>,
     pub use_parquet_caching: Option<bool>,
     pub caching_location: Option<String>,
-    pub caching_retention: Option<i64>,
+    pub caching_retention: Option<String>,
     pub caching_codec: Option<String>,
     pub caching_with_partitions: Option<bool>,
 }

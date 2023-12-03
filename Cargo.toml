@@ -25,6 +25,7 @@ serde_yaml = "0.9"
 serde_json = "1"
 chrono = "0"
 chrono-tz = "0.8.3"
+duration-str = "0.7.0"
 arrow = { version = "48", features = ["prettyprint", "ffi"] }
 arrow-array = { version = "48" }
 arrow-cast = { version = "48", features = ["prettyprint"] }

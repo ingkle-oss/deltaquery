@@ -15,9 +15,13 @@ use duckdb::{params, Connection};
 use polars::prelude::*;
 use serde_json::Value;
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fs;
+use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -46,12 +50,21 @@ pub struct DQPolarsTable {
     stats: DataFrame,
 
     use_versioning: bool,
+    use_record_caching: bool,
+    use_parquet_caching: bool,
+
+    caching_location: String,
+    caching_retention: Duration,
+    caching_codec: String,
+    caching_with_partitions: bool,
 
     protocol: Protocol,
     metadata: Metadata,
     files: HashMap<String, DQPolarsFile>,
+    caches: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
 
     engine: Arc<Mutex<Connection>>,
+    options: HashMap<String, String>,
 }
 
 impl DQPolarsTable {
@@ -110,12 +123,31 @@ impl DQPolarsTable {
             version: -1,
             predicates: predicates,
             use_versioning: table_config.use_versioning.unwrap_or(false),
+            use_record_caching: table_config.use_record_caching.unwrap_or(false),
+            use_parquet_caching: table_config.use_parquet_caching.unwrap_or(false),
+            caching_location: table_config
+                .caching_location
+                .clone()
+                .map_or(String::default(), |l| l.trim_end_matches("/").to_string()),
+            caching_retention: table_config
+                .caching_retention
+                .clone()
+                .map_or(Duration::new(60, 0), |retention| {
+                    duration_str::parse(&retention).unwrap()
+                }),
+            caching_codec: table_config
+                .caching_codec
+                .clone()
+                .unwrap_or(String::from_str("uncompressed").unwrap()),
+            caching_with_partitions: table_config.caching_with_partitions.unwrap_or(true),
             protocol: Protocol::default(),
             metadata: Metadata::default(),
             schema: Schema::empty(),
             files: HashMap::new(),
+            caches: Arc::new(Mutex::new(HashMap::new())),
             stats: DataFrame::default(),
             engine: Arc::new(Mutex::new(engine)),
+            options,
         }
     }
 
@@ -192,6 +224,95 @@ impl DQPolarsTable {
 
             log::info!("update={:?} version", self.version);
         }
+    }
+
+    async fn update_record_caches(&mut self, files: Vec<String>) -> Result<(), DQError> {
+        if files.len() > 0 {
+            let engine = Connection::open_in_memory()?;
+            setup_duckdb(&engine, &self.options)?;
+
+            let caches = self.caches.clone();
+
+            tokio::spawn(async move {
+                let mut caches = caches.lock().await;
+
+                for file in files.iter() {
+                    let mut stmt = engine
+                        .prepare(&format!(
+                            "SELECT * FROM read_parquet(['{}'], union_by_name=true)",
+                            file
+                        ))
+                        .unwrap();
+
+                    let batches = stmt.query_arrow([]).unwrap().collect::<Vec<RecordBatch>>();
+
+                    caches.insert(file.clone(), batches);
+                }
+            });
+        }
+
+        Ok(())
+    }
+
+    async fn update_parquet_caches(&mut self, files: Vec<String>) -> Result<(), DQError> {
+        let engine = Connection::open_in_memory()?;
+        setup_duckdb(&engine, &self.options)?;
+
+        let location = self.caching_location.clone();
+        let retention = self.caching_retention;
+        let codec = self.caching_codec.clone();
+
+        let columns = if self.caching_with_partitions {
+            self.schema
+                .fields()
+                .iter()
+                .map(|field| field.name().clone())
+                .collect::<Vec<String>>()
+        } else {
+            self.schema
+                .fields()
+                .iter()
+                .filter(|field| !self.metadata.partition_columns.contains(field.name()))
+                .map(|field| field.name().clone())
+                .collect::<Vec<String>>()
+        };
+
+        tokio::spawn(async move {
+            for file in files.iter() {
+                let tmpfile = format!("{}/.{}.parquet.tmp", location, get_hash(&file));
+                let cachefile = format!("{}/{}.parquet", location, get_hash(&file));
+
+                if fs::metadata(&cachefile).is_err() {
+                    match engine.execute(
+                        &format!(
+                            "COPY (SELECT {} FROM read_parquet(['{}'], union_by_name=true)) TO '{}' (FORMAT 'parquet', CODEC '{}')",
+                            columns.join(","), file, tmpfile, codec
+                        ),
+                        params![],
+                    ) {
+                        Ok(_) => fs::rename(tmpfile, cachefile).unwrap(),
+                        Err(_) => {}
+                    }
+                }
+            }
+
+            for entry in fs::read_dir(location).unwrap() {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        let last_accessed =
+                            metadata.accessed().unwrap().elapsed().unwrap().as_secs();
+
+                        if last_accessed > retention.as_secs() && metadata.is_file() {
+                            let _ = fs::remove_file(path);
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(())
     }
 }
 
@@ -282,22 +403,151 @@ impl DQTable for DQPolarsTable {
 
                     log::info!("files={:#?}", files);
 
-                    if files.len() > 0 {
-                        let engine = self.engine.lock().await;
+                    if self.use_record_caching {
+                        let mut fetches = Vec::new();
 
-                        let mut stmt = engine.prepare(&statement.to_string().replace(
-                            &from,
-                            &format!(
-                                        "read_parquet([{}])",
-                                        files
+                        if files.len() > 0 {
+                            let engine = self.engine.lock().await;
+                            let caches = self.caches.lock().await;
+
+                            let mut fields = Vec::new();
+
+                            for field in self.schema.fields() {
+                                match field.data_type() {
+                                    DataType::Date32 => {
+                                        fields.push(format!("{} {}", field.name(), "DATE"));
+                                    }
+                                    DataType::Date64 => {
+                                        fields.push(format!("{} {}", field.name(), "DATE"));
+                                    }
+                                    DataType::Utf8 => {
+                                        fields.push(format!("{} {}", field.name(), "VARCHAR"));
+                                    }
+                                    DataType::Int8 => {
+                                        fields.push(format!("{} {}", field.name(), "TINYINT"));
+                                    }
+                                    DataType::Int16 => {
+                                        fields.push(format!("{} {}", field.name(), "SMALLINT"));
+                                    }
+                                    DataType::Int32 => {
+                                        fields.push(format!("{} {}", field.name(), "INTEGER"));
+                                    }
+                                    DataType::Int64 => {
+                                        fields.push(format!("{} {}", field.name(), "BIGINT"));
+                                    }
+                                    DataType::Float32 => {
+                                        fields.push(format!("{} {}", field.name(), "REAL"));
+                                    }
+                                    DataType::Float64 => {
+                                        fields.push(format!("{} {}", field.name(), "DOUBLE"));
+                                    }
+                                    _ => unimplemented!(),
+                                }
+                            }
+
+                            let table0 = "memdb0";
+
+                            engine.execute(
+                                &format!("CREATE TABLE {} ({})", table0, fields.join(",")),
+                                params![],
+                            )?;
+
+                            let mut app = engine.appender(table0)?;
+
+                            for file in files {
+                                if let Some(batches) = caches.get(&file) {
+                                    for batch in batches {
+                                        app.append_record_batch(batch.clone())?;
+                                    }
+                                } else {
+                                    fetches.push(file);
+                                }
+                            }
+
+                            app.flush();
+
+                            if fetches.len() > 0 {
+                                engine.execute(
+                                    &format!(
+                                        "INSERT INTO {} SELECT * FROM read_parquet([{}], union_by_name=true)",
+                                        table0,
+                                        fetches
                                             .iter()
                                             .map(|file| format!("'{}'", file))
                                             .collect::<Vec<String>>()
                                             .join(",")
                                     ),
-                        ))?;
+                                    params![],
+                                )?;
+                            }
 
-                        batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());
+                            let mut stmt =
+                                engine.prepare(&statement.to_string().replace(&from, table0))?;
+
+                            batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());
+
+                            engine.execute(&format!("DROP TABLE {}", table0), params![])?;
+                        }
+
+                        self.update_record_caches(fetches).await?;
+                    } else if self.use_parquet_caching {
+                        let mut fetches = Vec::new();
+                        let mut parquets = Vec::new();
+
+                        if files.len() > 0 {
+                            let engine = self.engine.lock().await;
+
+                            for file in files.iter() {
+                                let cachefile = format!(
+                                    "{}/{}.parquet",
+                                    self.caching_location,
+                                    get_hash(&file)
+                                );
+
+                                if fs::metadata(&cachefile).is_ok() {
+                                    log::info!("cached={} => {}", file, cachefile);
+
+                                    parquets.push(cachefile);
+                                } else {
+                                    parquets.push(file.clone());
+                                    fetches.push(file.clone());
+                                }
+                            }
+
+                            let mut stmt = engine.prepare(&statement.to_string().replace(
+                                &from,
+                                &format!(
+                                    "read_parquet([{}], union_by_name=true)",
+                                    parquets
+                                        .iter()
+                                        .map(|file| format!("'{}'", file))
+                                        .collect::<Vec<String>>()
+                                        .join(",")
+                                    ),
+                            ))?;
+
+                            batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());
+                        }
+
+                        self.update_parquet_caches(fetches).await?;
+                    } else {
+                        if files.len() > 0 {
+                            let engine = self.engine.lock().await;
+
+                            let mut stmt = engine.prepare(&statement.to_string().replace(
+                                &from,
+                                &format!(
+                                    "read_parquet([{}], union_by_name=true)",
+                                    files
+                                        .iter()
+                                        .map(|file| format!("'{}'", file))
+                                        .collect::<Vec<String>>()
+                                        .join(",")
+                                    ),
+                            ))?;
+
+                            batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());
+                        }
                     }
                 }
                 _ => unreachable!(),
@@ -514,4 +764,10 @@ fn get_statistics(
     series.push(Series::new(STATS_TABLE_ADD_PATH, paths));
 
     DataFrame::new(series).unwrap()
+}
+
+fn get_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }
