@@ -3,7 +3,7 @@ use crate::configs::{DQFilesystemConfig, DQTableConfig};
 use crate::error::DQError;
 use crate::metadata::DQMetadataMap;
 use crate::state::DQState;
-use crate::table::DQTable;
+use crate::table::{DQTable, DQTableFactory};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
 use deltalake::arrow::datatypes::{DataType, FieldRef, Schema};
@@ -556,6 +556,26 @@ impl DQTable for DQPolarsTable {
         }
 
         Ok(batches)
+    }
+}
+
+pub struct DQPolarsTableFactory {}
+
+impl DQPolarsTableFactory {
+    pub fn new() -> Self {
+        DQPolarsTableFactory {}
+    }
+}
+
+#[async_trait]
+impl DQTableFactory for DQPolarsTableFactory {
+    async fn create(
+        &self,
+        table_config: &DQTableConfig,
+        filesystem_config: Option<&DQFilesystemConfig>,
+        state: &DQState,
+    ) -> Box<dyn DQTable> {
+        Box::new(DQPolarsTable::new(table_config, filesystem_config, state).await)
     }
 }
 
