@@ -1,8 +1,6 @@
 version: 1
 server: "delta"
 listen: "0.0.0.0:32010"
-endpoint: "grpc://127.0.0.1:32010"
-compression: "zstd"
 filesystems:
   - name: "minio"
     configs:

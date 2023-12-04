@@ -20,6 +20,9 @@ pub struct DQOption {
     #[arg(short = 'c', long, help = "Config file")]
     config: Option<String>,
 
+    #[arg(short = 't', long, help = "Catalog file")]
+    catalog: Option<String>,
+
     #[arg(short = 'l', long, help = "Log filters")]
     logfilter: Option<String>,
 }
@@ -73,6 +76,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => panic!("could not find config file"),
     };
 
+    let catalog = match args.get_one::<String>("catalog") {
+        Some(catalog) => {
+            let f = File::open(catalog).expect("could not open file");
+            let c: serde_yaml::Mapping = serde_yaml::from_reader(f).expect("could not parse yaml");
+
+            c
+        }
+        None => panic!("could not find config file"),
+    };
+
     let state = Arc::new(Mutex::new(DQState::new(config.clone()).await));
     handle_state(state.clone());
 
@@ -98,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "simple" => {
             server
                 .add_service(FlightServiceServer::new(
-                    FlightSqlServiceSimple::new(state.clone()).await,
+                    FlightSqlServiceSimple::new(state.clone(), catalog).await,
                 ))
                 .serve(listen)
                 .await?;
@@ -106,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => {
             server
                 .add_service(FlightServiceServer::new(
-                    FlightSqlServiceDelta::new(state.clone()).await,
+                    FlightSqlServiceDelta::new(state.clone(), catalog).await,
                 ))
                 .serve(listen)
                 .await?;

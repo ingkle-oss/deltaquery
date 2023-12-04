@@ -39,8 +39,6 @@ pub struct DQConfig {
     pub version: i32,
     pub server: String,
     pub listen: String,
-    pub endpoint: String,
-    pub compression: Option<String>,
 
     pub tls: Option<DQTlsConfig>,
 

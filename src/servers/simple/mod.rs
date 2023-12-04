@@ -90,7 +90,7 @@ static SIMPLE_TABLES: Lazy<Vec<&'static str>> = Lazy::new(|| vec!["deltaquery.si
 pub struct FlightSqlServiceSimple {}
 
 impl FlightSqlServiceSimple {
-    pub async fn new(_state: Arc<Mutex<DQState>>) -> Self {
+    pub async fn new(_state: Arc<Mutex<DQState>>, _catalog: serde_yaml::Mapping) -> Self {
         FlightSqlServiceSimple {}
     }
 

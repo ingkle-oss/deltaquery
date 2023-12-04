@@ -18,10 +18,6 @@ impl DQState {
         }
     }
 
-    pub fn get_config(&self) -> &DQConfig {
-        &self.config
-    }
-
     pub async fn get_table(&mut self, target: &String) -> Option<&mut Box<dyn DQTable>> {
         if !self.tables.contains_key(target) {
             if let Some(table_config) = self.config.tables.iter().find(|c| &c.name == target) {

@@ -35,6 +35,7 @@ use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, Streaming};
@@ -58,18 +59,32 @@ static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
 pub struct FlightSqlServiceDelta {
     state: Arc<Mutex<DQState>>,
 
-    compression: Option<String>,
+    compression: Option<CompressionType>,
+
+    endpoint: String,
 
     handles: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
 }
 
 impl FlightSqlServiceDelta {
-    pub async fn new(state: Arc<Mutex<DQState>>) -> Self {
-        let compression = state.lock().await.get_config().compression.clone();
+    pub async fn new(state: Arc<Mutex<DQState>>, catalog: serde_yaml::Mapping) -> Self {
+        let compression = match catalog.get("compression") {
+            Some(compression) => match compression.as_str() {
+                Some("zstd") => Some(CompressionType::ZSTD),
+                Some(&_) => None,
+                None => None,
+            },
+            None => None,
+        };
+        let endpoint = match catalog.get("endpoint") {
+            Some(endpoint) => endpoint.as_str().unwrap().to_string(),
+            None => String::from_str("grpc://127.0.0.1:32010").unwrap(),
+        };
 
         FlightSqlServiceDelta {
             state,
             compression,
+            endpoint,
             handles: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -213,11 +228,9 @@ impl FlightSqlService for FlightSqlServiceDelta {
                         let metadata = HashMap::new();
 
                         let batches = table.select(statement, &metadata).await?;
-                        if let Ok(Some(flight_info)) = self.build_flight_info(
-                            &batches,
-                            handle.clone(),
-                            state.get_config().endpoint.clone(),
-                        ) {
+                        if let Ok(Some(flight_info)) =
+                            self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
+                        {
                             let mut handles = self.handles.lock().await;
                             handles.insert(handle.clone(), batches);
 
@@ -593,17 +606,10 @@ impl FlightSqlService for FlightSqlServiceDelta {
                     let num_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
                     let num_bytes: usize = batches.iter().map(|b| b.get_array_memory_size()).sum();
                     log::info!("schema={:#?}", schema);
-                    let flight_data = flight::batches_to_flight_data(
-                        schema.as_ref(),
-                        batches,
-                        match self.compression.as_deref() {
-                            Some("zstd") => Some(CompressionType::ZSTD),
-                            Some(&_) => None,
-                            None => None,
-                        },
-                    )?
-                    .into_iter()
-                    .map(Ok);
+                    let flight_data =
+                        flight::batches_to_flight_data(schema.as_ref(), batches, self.compression)?
+                            .into_iter()
+                            .map(Ok);
 
                     let stream: Pin<Box<dyn Stream<Item = Result<FlightData, Status>> + Send>> =
                         Box::pin(stream::iter(flight_data));

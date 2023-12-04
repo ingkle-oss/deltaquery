@@ -1,4 +1,3 @@
 version: 1
 server: "simple"
 listen: "0.0.0.0:32011"
-endpoint: "grpc://127.0.0.1:32011"

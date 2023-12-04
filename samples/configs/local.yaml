@@ -1,0 +1,2 @@
+endpoint: "grpc://127.0.0.1:32010"
+compression: "zstd"
