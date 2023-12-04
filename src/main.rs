@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let catalog = match args.get_one::<String>("catalog") {
         Some(catalog) => {
             let f = File::open(catalog).expect("could not open file");
-            let c: serde_yaml::Mapping = serde_yaml::from_reader(f).expect("could not parse yaml");
+            let c = serde_yaml::from_reader(f).expect("could not parse yaml");
 
             c
         }
@@ -109,10 +109,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("listening on {:?}", listen);
 
     match config.server.as_str() {
-        "simple" => {
+        "delta" => {
             server
                 .add_service(FlightServiceServer::new(
-                    FlightSqlServiceSimple::new(state.clone(), catalog).await,
+                    FlightSqlServiceDelta::new(state.clone(), catalog).await,
                 ))
                 .serve(listen)
                 .await?;
@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => {
             server
                 .add_service(FlightServiceServer::new(
-                    FlightSqlServiceDelta::new(state.clone(), catalog).await,
+                    FlightSqlServiceSimple::new(state.clone(), catalog).await,
                 ))
                 .serve(listen)
                 .await?;

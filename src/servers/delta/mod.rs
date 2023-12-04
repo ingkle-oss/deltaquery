@@ -30,12 +30,12 @@ use base64::Engine;
 use futures::{stream, Stream, TryStreamExt};
 use once_cell::sync::Lazy;
 use prost::Message;
+use serde::{Deserialize, Serialize};
 use sqlparser::ast::Statement;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, Streaming};
@@ -55,36 +55,38 @@ static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
     builder.build().unwrap()
 });
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FlightSqlServiceDeltaConfig {
+    compression: Option<String>,
+    endpoint: String,
+}
+
 #[derive(Clone)]
 pub struct FlightSqlServiceDelta {
+    config: FlightSqlServiceDeltaConfig,
+
     state: Arc<Mutex<DQState>>,
 
     compression: Option<CompressionType>,
-
-    endpoint: String,
 
     handles: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
 }
 
 impl FlightSqlServiceDelta {
-    pub async fn new(state: Arc<Mutex<DQState>>, catalog: serde_yaml::Mapping) -> Self {
-        let compression = match catalog.get("compression") {
-            Some(compression) => match compression.as_str() {
-                Some("zstd") => Some(CompressionType::ZSTD),
-                Some(&_) => None,
-                None => None,
-            },
+    pub async fn new(state: Arc<Mutex<DQState>>, catalog: serde_yaml::Value) -> Self {
+        let config: FlightSqlServiceDeltaConfig = serde_yaml::from_value(catalog).unwrap();
+
+        let compression = match config.compression.as_deref() {
+            Some("zstd") => Some(CompressionType::ZSTD),
+            Some(&_) => None,
             None => None,
-        };
-        let endpoint = match catalog.get("endpoint") {
-            Some(endpoint) => endpoint.as_str().unwrap().to_string(),
-            None => String::from_str("grpc://127.0.0.1:32010").unwrap(),
         };
 
         FlightSqlServiceDelta {
             state,
+            config,
             compression,
-            endpoint,
             handles: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -228,9 +230,11 @@ impl FlightSqlService for FlightSqlServiceDelta {
                         let metadata = HashMap::new();
 
                         let batches = table.select(statement, &metadata).await?;
-                        if let Ok(Some(flight_info)) =
-                            self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
-                        {
+                        if let Ok(Some(flight_info)) = self.build_flight_info(
+                            &batches,
+                            handle.clone(),
+                            self.config.endpoint.clone(),
+                        ) {
                             let mut handles = self.handles.lock().await;
                             handles.insert(handle.clone(), batches);
 
