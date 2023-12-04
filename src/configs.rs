@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use struct_field_names_as_array::FieldNamesAsArray;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -8,7 +9,8 @@ pub struct DQFilesystemConfig {
     pub configs: HashMap<String, String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow, FieldNamesAsArray)]
+#[field_names_as_array(visibility = "pub(super)")]
 #[serde(rename_all = "camelCase")]
 pub struct DQTableConfig {
     pub name: String,
@@ -27,6 +29,14 @@ pub struct DQTableConfig {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct DQMetastoreConfig {
+    pub url: String,
+
+    pub tables: String,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DQTlsConfig {
     pub server_cert: String,
     pub server_key: String,
@@ -40,6 +50,7 @@ pub struct DQConfig {
     pub server: String,
     pub listen: String,
 
+    pub metastore: Option<DQMetastoreConfig>,
     pub tls: Option<DQTlsConfig>,
 
     #[serde(default)]

@@ -39,6 +39,7 @@ fn handle_state(state: Arc<Mutex<DQState>>) {
         loop {
             {
                 let mut state = state.lock().await;
+                state.update_tables().await;
 
                 for (_, table) in state.get_tables() {
                     let time0 = Instant::now();
