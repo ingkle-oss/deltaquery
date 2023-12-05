@@ -19,13 +19,19 @@ tables:
   - name: "delta.default.test0"
     engine: "polars"
     filesystem: "minio"
-    location: "s3://delta/"
+    location: "s3://test0/"
+    predicates: "date,hour"
+    useVersioning: false
+  - name: "delta.default.test1"
+    engine: "polars"
+    filesystem: "minio"
+    location: "s3://test1/"
     predicates: "date,hour"
     useVersioning: false
   - name: "delta.default.cache"
     engine: "polars"
     filesystem: "minio"
-    location: "s3://delta/"
+    location: "s3://test0/"
     predicates: "date,hour"
     useVersioning: false
     useParquetCaching: true
