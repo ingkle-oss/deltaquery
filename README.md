@@ -23,7 +23,7 @@ docker-compose up
 To execute server, run
 
 ```bash
-cargo run -- --logfilter deltasync=info --config ./samples/configs/delta.yaml
+cargo run -- --logfilter deltasync=info --config ./samples/configs/delta.yaml --catalog ./samples/configs/local.yaml
 ```
 
 To execute python client using ADBC, run
