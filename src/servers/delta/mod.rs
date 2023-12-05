@@ -59,16 +59,16 @@ static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
 #[serde(rename_all = "camelCase")]
 pub struct FlightSqlServiceDeltaConfig {
     compression: Option<String>,
-    endpoint: String,
+    endpoint: Option<String>,
+    port: Option<u16>,
 }
 
 #[derive(Clone)]
 pub struct FlightSqlServiceDelta {
-    config: FlightSqlServiceDeltaConfig,
-
     state: Arc<Mutex<DQState>>,
 
     compression: Option<CompressionType>,
+    endpoint: String,
 
     handles: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
 }
@@ -83,10 +83,21 @@ impl FlightSqlServiceDelta {
             None => None,
         };
 
+        let endpoint = match config.endpoint {
+            Some(endpoint) => endpoint.clone(),
+            None => local_ip_address::local_ip()
+                .expect("could not fetch local ip address")
+                .to_string(),
+        };
+        let port = match config.port {
+            Some(port) => port,
+            None => 32010,
+        };
+
         FlightSqlServiceDelta {
             state,
-            config,
             compression,
+            endpoint: format!("grpc://{}:{}", endpoint, port),
             handles: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -230,11 +241,9 @@ impl FlightSqlService for FlightSqlServiceDelta {
                         let metadata = HashMap::new();
 
                         let batches = table.select(statement, &metadata).await?;
-                        if let Ok(Some(flight_info)) = self.build_flight_info(
-                            &batches,
-                            handle.clone(),
-                            self.config.endpoint.clone(),
-                        ) {
+                        if let Ok(Some(flight_info)) =
+                            self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
+                        {
                             let mut handles = self.handles.lock().await;
                             handles.insert(handle.clone(), batches);
 
