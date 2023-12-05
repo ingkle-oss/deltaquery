@@ -82,7 +82,6 @@ impl FlightSqlServiceDelta {
             Some(&_) => None,
             None => None,
         };
-
         let endpoint = match config.endpoint {
             Some(endpoint) => endpoint.clone(),
             None => local_ip_address::local_ip()

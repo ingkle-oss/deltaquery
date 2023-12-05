@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             c
         }
-        None => panic!("could not find catalog file"),
+        None => serde_yaml::Value::default(),
     };
 
     register_table_factory("polars", Box::new(DQPolarsTableFactory::new())).await;
