@@ -1,6 +1,11 @@
 version: 1
 server: "delta"
 listen: "0.0.0.0:32010"
+engines:
+  - name: "polars"
+    type: "polars"
+    configs:
+      memory_limit: "-1"
 filesystems:
   - name: "minio"
     configs:
@@ -12,13 +17,13 @@ filesystems:
       AWS_ALLOW_HTTP: "true"
 tables:
   - name: "delta.default.test0"
-    repository: "polars"
+    engine: "polars"
     filesystem: "minio"
     location: "s3://delta/"
     predicates: "date,hour"
     useVersioning: false
   - name: "delta.default.cache"
-    repository: "polars"
+    engine: "polars"
     filesystem: "minio"
     location: "s3://delta/"
     predicates: "date,hour"
@@ -28,7 +33,7 @@ tables:
     cachingRetention: 5s
     cachingCodec: "zstd"
   - name: "delta.default.local"
-    repository: "polars"
+    engine: "polars"
     location: "file:///Users/haruband/Documents/deltaquery/samples/samples/delta/"
     predicates: "date,hour"
     useVersioning: false

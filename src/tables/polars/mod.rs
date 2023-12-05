@@ -1,5 +1,5 @@
 use crate::commons::delta;
-use crate::configs::{DQFilesystemConfig, DQTableConfig};
+use crate::configs::{DQEngineConfig, DQFilesystemConfig, DQTableConfig};
 use crate::error::DQError;
 use crate::metadata::DQMetadataMap;
 use crate::state::DQState;
@@ -64,19 +64,27 @@ pub struct DQPolarsTable {
     caches: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
 
     engine: Arc<Mutex<Connection>>,
-    options: HashMap<String, String>,
+
+    engine_options: HashMap<String, String>,
+    filesystem_options: HashMap<String, String>,
 }
 
 impl DQPolarsTable {
     pub async fn new(
         table_config: &DQTableConfig,
+        engine_config: &DQEngineConfig,
         filesystem_config: Option<&DQFilesystemConfig>,
         _state: &DQState,
     ) -> Self {
-        let mut options = HashMap::<String, String>::new();
+        let mut engine_options = HashMap::<String, String>::new();
+        for (k, v) in engine_config.configs.iter() {
+            engine_options.insert(k.clone(), v.clone());
+        }
+
+        let mut filesystem_options = HashMap::<String, String>::new();
         if let Some(filesystem_config) = filesystem_config {
             for (k, v) in filesystem_config.configs.iter() {
-                options.insert(k.clone(), v.clone());
+                filesystem_options.insert(k.clone(), v.clone());
             }
         }
 
@@ -88,7 +96,7 @@ impl DQPolarsTable {
         } else {
             location
         };
-        let store = Arc::new(DefaultLogStore::try_new(url, options.clone()).unwrap());
+        let store = Arc::new(DefaultLogStore::try_new(url, filesystem_options.clone()).unwrap());
 
         let predicates = match table_config.predicates.as_ref() {
             Some(predicates) => {
@@ -115,7 +123,7 @@ impl DQPolarsTable {
         }
 
         let engine = Connection::open_in_memory().unwrap();
-        setup_duckdb(&engine, &options).unwrap();
+        setup_duckdb(&engine, &engine_options, &filesystem_options).unwrap();
 
         DQPolarsTable {
             store,
@@ -147,7 +155,8 @@ impl DQPolarsTable {
             caches: Arc::new(Mutex::new(HashMap::new())),
             stats: DataFrame::default(),
             engine: Arc::new(Mutex::new(engine)),
-            options,
+            engine_options,
+            filesystem_options,
         }
     }
 
@@ -229,7 +238,7 @@ impl DQPolarsTable {
     async fn update_record_caches(&mut self, files: Vec<String>) -> Result<(), DQError> {
         if files.len() > 0 {
             let engine = Connection::open_in_memory()?;
-            setup_duckdb(&engine, &self.options)?;
+            setup_duckdb(&engine, &self.engine_options, &self.filesystem_options)?;
 
             let caches = self.caches.clone();
 
@@ -256,7 +265,7 @@ impl DQPolarsTable {
 
     async fn update_parquet_caches(&mut self, files: Vec<String>) -> Result<(), DQError> {
         let engine = Connection::open_in_memory()?;
-        setup_duckdb(&engine, &self.options)?;
+        setup_duckdb(&engine, &self.engine_options, &self.filesystem_options)?;
 
         let location = self.caching_location.clone();
         let retention = self.caching_retention;
@@ -572,19 +581,28 @@ impl DQTableFactory for DQPolarsTableFactory {
     async fn create(
         &self,
         table_config: &DQTableConfig,
+        engine_config: &DQEngineConfig,
         filesystem_config: Option<&DQFilesystemConfig>,
         state: &DQState,
     ) -> Box<dyn DQTable> {
-        Box::new(DQPolarsTable::new(table_config, filesystem_config, state).await)
+        Box::new(DQPolarsTable::new(table_config, engine_config, filesystem_config, state).await)
     }
 }
 
-fn setup_duckdb(engine: &Connection, options: &HashMap<String, String>) -> Result<(), DQError> {
+fn setup_duckdb(
+    engine: &Connection,
+    engine_options: &HashMap<String, String>,
+    filesystem_options: &HashMap<String, String>,
+) -> Result<(), DQError> {
     engine.execute("PRAGMA enable_object_cache", params![])?;
 
+    if let Some(memory_limit) = engine_options.get("memory_limit") {
+        engine.execute(&format!("SET memory_limit='{}'", memory_limit), params![])?;
+    }
+
     if let (Some(s3_access_key_id), Some(s3_secret_access_key)) = (
-        options.get("AWS_ACCESS_KEY_ID"),
-        options.get("AWS_SECRET_ACCESS_KEY"),
+        filesystem_options.get("AWS_ACCESS_KEY_ID"),
+        filesystem_options.get("AWS_SECRET_ACCESS_KEY"),
     ) {
         engine.execute(
             &format!("SET s3_access_key_id='{}'", s3_access_key_id),
@@ -597,7 +615,7 @@ fn setup_duckdb(engine: &Connection, options: &HashMap<String, String>) -> Resul
 
         engine.execute("SET s3_url_style='path'", params![])?;
 
-        if let Some(s3_endpoint) = options.get("AWS_ENDPOINT_URL") {
+        if let Some(s3_endpoint) = filesystem_options.get("AWS_ENDPOINT_URL") {
             let url: Url = s3_endpoint.parse().unwrap();
 
             engine.execute(
@@ -609,10 +627,10 @@ fn setup_duckdb(engine: &Connection, options: &HashMap<String, String>) -> Resul
                 params![],
             )?;
         }
-        if let Some(s3_region) = options.get("AWS_REGION") {
+        if let Some(s3_region) = filesystem_options.get("AWS_REGION") {
             engine.execute(&format!("SET s3_region='{}'", s3_region), params![])?;
         }
-        if let Some(s3_allow_http) = options.get("AWS_ALLOW_HTTP") {
+        if let Some(s3_allow_http) = filesystem_options.get("AWS_ALLOW_HTTP") {
             if s3_allow_http == "true" {
                 engine.execute("SET s3_use_ssl=false", params![])?;
             } else {

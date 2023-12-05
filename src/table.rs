@@ -1,4 +1,4 @@
-use crate::configs::{DQFilesystemConfig, DQTableConfig};
+use crate::configs::{DQEngineConfig, DQFilesystemConfig, DQTableConfig};
 use crate::error::DQError;
 use crate::metadata::DQMetadataMap;
 use crate::state::DQState;
@@ -27,6 +27,7 @@ pub trait DQTableFactory: Send + Sync {
     async fn create(
         &self,
         table_config: &DQTableConfig,
+        engine_config: &DQEngineConfig,
         filesystem_config: Option<&DQFilesystemConfig>,
         state: &DQState,
     ) -> Box<dyn DQTable>;
@@ -40,12 +41,15 @@ pub async fn register_table_factory(name: &str, factory: Box<dyn DQTableFactory>
 pub async fn create_table_using_factory(
     name: &str,
     table_config: &DQTableConfig,
+    engine_config: &DQEngineConfig,
     filesystem_config: Option<&DQFilesystemConfig>,
     state: &DQState,
 ) -> Option<Box<dyn DQTable>> {
     let factories = TABLE_FACTORIES.lock().await;
     if let Some(factory) = factories.get(name) {
-        let table: Box<dyn DQTable> = factory.create(table_config, filesystem_config, state).await;
+        let table: Box<dyn DQTable> = factory
+            .create(table_config, engine_config, filesystem_config, state)
+            .await;
         Some(table)
     } else {
         None

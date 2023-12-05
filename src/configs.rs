@@ -4,6 +4,14 @@ use struct_field_names_as_array::FieldNamesAsArray;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct DQEngineConfig {
+    pub name: String,
+    pub r#type: String,
+    pub configs: HashMap<String, String>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DQFilesystemConfig {
     pub name: String,
     pub configs: HashMap<String, String>,
@@ -14,7 +22,7 @@ pub struct DQFilesystemConfig {
 #[serde(rename_all = "camelCase")]
 pub struct DQTableConfig {
     pub name: String,
-    pub repository: String,
+    pub engine: String,
     pub filesystem: Option<String>,
     pub location: String,
     pub predicates: Option<String>,
@@ -52,6 +60,9 @@ pub struct DQConfig {
 
     pub metastore: Option<DQMetastoreConfig>,
     pub tls: Option<DQTlsConfig>,
+
+    #[serde(default)]
+    pub engines: Vec<DQEngineConfig>,
 
     #[serde(default)]
     pub filesystems: Vec<DQFilesystemConfig>,
