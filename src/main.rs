@@ -108,28 +108,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Server::builder()
     };
 
+    let router = match config.server.as_str() {
+        "delta" => server.add_service(FlightServiceServer::new(
+            FlightSqlServiceDelta::new(state.clone(), catalog).await,
+        )),
+        _ => server.add_service(FlightServiceServer::new(
+            FlightSqlServiceSimple::new(state.clone(), catalog).await,
+        )),
+    };
+
     let listen = config.listen.parse()?;
 
     log::info!("listening on {:?}", listen);
 
-    match config.server.as_str() {
-        "delta" => {
-            server
-                .add_service(FlightServiceServer::new(
-                    FlightSqlServiceDelta::new(state.clone(), catalog).await,
-                ))
-                .serve(listen)
-                .await?;
-        }
-        _ => {
-            server
-                .add_service(FlightServiceServer::new(
-                    FlightSqlServiceSimple::new(state.clone(), catalog).await,
-                ))
-                .serve(listen)
-                .await?;
-        }
-    }
+    router.serve(listen).await?;
 
     Ok(())
 }
