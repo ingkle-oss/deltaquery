@@ -68,7 +68,7 @@ fn build_fake_records(datetime: DateTime<Utc>, records: i32) -> RecordBatch {
         let timestamp = datetime.timestamp_millis();
         let company = Industry().fake::<String>();
         let name = Name(EN).fake::<String>();
-        let score = (0..10000000).fake::<i32>();
+        let score = (0..).fake::<i32>();
 
         dates.push(date);
         hours.push(hour);
