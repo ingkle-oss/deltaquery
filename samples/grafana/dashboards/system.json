@@ -107,7 +107,7 @@
             "uid": "P1809F7CD0C75ACF3"
           },
           "editorMode": "code",
-          "expr": "(1 - avg(irate(node_cpu_seconds_total{mode=\"idle\"}[10m])) by (instance)) * 100",
+          "expr": "avg(irate(node_cpu_seconds_total{mode=\"idle\"}[10m])) by (instance) * 100",
           "legendFormat": "idle",
           "range": true,
           "refId": "A"
