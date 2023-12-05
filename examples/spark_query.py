@@ -27,6 +27,8 @@ if __name__ == "__main__":
         help="sql query",
         default="select * from test0",
     )
+    parser.add_argument("--localdir", help="spark local dir")
+    parser.add_argument("--spillable", help="spark spillable")
     parser.add_argument("--loglevel", help="log level", default="INFO")
     args = parser.parse_args()
 
@@ -50,6 +52,10 @@ if __name__ == "__main__":
     so.set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
     so.set("spark.hadoop.fs.s3a.path.style.access", "true")
     so.set("spark.hadoop.fs.s3a.connection.ssl.enabled", "true")
+    if args.localdir:
+        so.set("spark.local.dir", args.localdir)
+    if args.spillable:
+        so.set("spark.shuffle.spill", args.spillable)
 
     ss = SparkSession.builder.config(conf=so).appName("spark-query").getOrCreate()
     ss.sparkContext.setLogLevel(args.loglevel)
