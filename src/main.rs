@@ -4,6 +4,7 @@ use deltaquery::configs::DQConfig;
 use deltaquery::servers::delta::FlightSqlServiceDelta;
 use deltaquery::servers::simple::FlightSqlServiceSimple;
 use deltaquery::state::DQState;
+use deltaquery::table::register_table_factory;
 use deltaquery::tables::polars::DQPolarsTableFactory;
 use env_logger::Builder;
 use std::env;
@@ -85,13 +86,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             c
         }
-        None => panic!("could not find config file"),
+        None => panic!("could not find catalog file"),
     };
 
-    let mut state = DQState::new(config.clone()).await;
-    state.register_table_factory("polars", Box::new(DQPolarsTableFactory::new()));
+    register_table_factory("polars", Box::new(DQPolarsTableFactory::new())).await;
 
-    let state = Arc::new(Mutex::new(state));
+    let state = Arc::new(Mutex::new(DQState::new(config.clone()).await));
     handle_state(state.clone());
 
     let mut server = if let Some(tls_config) = config.tls.as_ref() {

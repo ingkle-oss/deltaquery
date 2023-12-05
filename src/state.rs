@@ -1,5 +1,6 @@
 use crate::configs::{DQConfig, DQTableConfig};
-use crate::table::{DQTable, DQTableFactory};
+use crate::table::create_table_using_factory;
+use crate::table::DQTable;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use std::collections::hash_map::IterMut;
@@ -7,8 +8,6 @@ use std::collections::HashMap;
 
 pub struct DQState {
     config: DQConfig,
-
-    factories: HashMap<String, Box<dyn DQTableFactory>>,
 
     tables: HashMap<String, Box<dyn DQTable>>,
 
@@ -32,14 +31,9 @@ impl DQState {
 
         DQState {
             config,
-            factories: HashMap::new(),
             tables: HashMap::new(),
             pool,
         }
-    }
-
-    pub fn register_table_factory(&mut self, name: &str, factory: Box<dyn DQTableFactory>) {
-        self.factories.insert(name.to_string(), factory);
     }
 
     pub async fn get_table(&mut self, target: &String) -> Option<&mut Box<dyn DQTable>> {
@@ -54,9 +48,14 @@ impl DQState {
                     None
                 };
 
-                if let Some(factory) = self.factories.get(&table_config.repository) {
-                    let mut table: Box<dyn DQTable> =
-                        factory.create(table_config, filesystem_config, self).await;
+                if let Some(mut table) = create_table_using_factory(
+                    &table_config.repository,
+                    table_config,
+                    filesystem_config,
+                    self,
+                )
+                .await
+                {
                     let _ = table.update().await;
 
                     self.tables.insert(target.clone(), table);

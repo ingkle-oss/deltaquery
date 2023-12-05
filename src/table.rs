@@ -4,7 +4,13 @@ use crate::metadata::DQMetadataMap;
 use crate::state::DQState;
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
 use sqlparser::ast::Statement;
+use std::collections::HashMap;
+use tokio::sync::Mutex;
+
+static TABLE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQTableFactory>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[async_trait]
 pub trait DQTable: Send + Sync {
@@ -24,4 +30,24 @@ pub trait DQTableFactory: Send + Sync {
         filesystem_config: Option<&DQFilesystemConfig>,
         state: &DQState,
     ) -> Box<dyn DQTable>;
+}
+
+pub async fn register_table_factory(name: &str, factory: Box<dyn DQTableFactory>) {
+    let mut factories = TABLE_FACTORIES.lock().await;
+    factories.insert(name.to_string(), factory);
+}
+
+pub async fn create_table_using_factory(
+    name: &str,
+    table_config: &DQTableConfig,
+    filesystem_config: Option<&DQFilesystemConfig>,
+    state: &DQState,
+) -> Option<Box<dyn DQTable>> {
+    let factories = TABLE_FACTORIES.lock().await;
+    if let Some(factory) = factories.get(name) {
+        let table: Box<dyn DQTable> = factory.create(table_config, filesystem_config, state).await;
+        Some(table)
+    } else {
+        None
+    }
 }
