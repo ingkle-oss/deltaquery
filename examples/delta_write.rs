@@ -42,54 +42,7 @@ struct DSOption {
     minutes: i32,
 
     #[arg(long, help = "Records")]
-    records: i32,
-}
-
-fn build_fake_records(datetime: DateTime<Utc>, records: i32) -> RecordBatch {
-    let schema = Arc::new(ArrowSchema::new(vec![
-        Field::new("date", DataType::Utf8, false),
-        Field::new("hour", DataType::Utf8, false),
-        Field::new("timestamp", DataType::Int64, false),
-        Field::new("company", DataType::Utf8, false),
-        Field::new("name", DataType::Utf8, false),
-        Field::new("score", DataType::Int32, false),
-    ]));
-
-    let mut dates = Vec::<String>::new();
-    let mut hours = Vec::<String>::new();
-    let mut timestamps = Vec::<i64>::new();
-    let mut companies = Vec::<String>::new();
-    let mut names = Vec::<String>::new();
-    let mut scores = Vec::<i32>::new();
-
-    for _ in 0..records {
-        let date = datetime.format("%Y-%m-%d").to_string();
-        let hour = datetime.format("%H").to_string();
-        let timestamp = datetime.timestamp_millis();
-        let company = Industry().fake::<String>();
-        let name = Name(EN).fake::<String>();
-        let score = (0..).fake::<i32>();
-
-        dates.push(date);
-        hours.push(hour);
-        timestamps.push(timestamp);
-        companies.push(company);
-        names.push(name);
-        scores.push(score);
-    }
-
-    RecordBatch::try_new(
-        schema,
-        vec![
-            Arc::new(StringArray::from(dates)),
-            Arc::new(StringArray::from(hours)),
-            Arc::new(Int64Array::from(timestamps)),
-            Arc::new(StringArray::from(companies)),
-            Arc::new(StringArray::from(names)),
-            Arc::new(Int32Array::from(scores)),
-        ],
-    )
-    .unwrap()
+    records: usize,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -101,7 +54,7 @@ async fn main() -> Result<(), deltalake::DeltaTableError> {
     let uri = args.get_one::<String>("uri").unwrap();
     let partitions = args.get_one::<String>("partitions").unwrap();
     let minutes = args.get_one::<i32>("minutes").unwrap();
-    let records = args.get_one::<i32>("records").unwrap();
+    let records = args.get_one::<usize>("records").unwrap();
 
     let mut storage_options = HashMap::<String, String>::new();
     if let Some(endpoint) = args.get_one::<String>("endpoint") {
@@ -133,8 +86,54 @@ async fn main() -> Result<(), deltalake::DeltaTableError> {
         Utc::now()
     };
 
+    let schema = Arc::new(ArrowSchema::new(vec![
+        Field::new("date", DataType::Utf8, false),
+        Field::new("hour", DataType::Utf8, false),
+        Field::new("timestamp", DataType::Int64, false),
+        Field::new("company", DataType::Utf8, false),
+        Field::new("name", DataType::Utf8, false),
+        Field::new("score", DataType::Int32, false),
+    ]));
+
+    let mut companies = Vec::<String>::new();
+    let mut names = Vec::<String>::new();
+    let mut scores = Vec::<i32>::new();
+
+    for _ in 0..*records {
+        let company = Industry().fake::<String>();
+        let name = Name(EN).fake::<String>();
+        let score = (0..).fake::<i32>();
+
+        companies.push(company);
+        names.push(name);
+        scores.push(score);
+    }
+
+    let companies = Arc::new(StringArray::from(companies));
+    let names = Arc::new(StringArray::from(names));
+    let scores = Arc::new(Int32Array::from(scores));
+
     for _ in 0..*minutes {
-        let batch = build_fake_records(datetime, *records);
+        let date = datetime.format("%Y-%m-%d").to_string();
+        let hour = datetime.format("%H").to_string();
+        let timestamp = datetime.timestamp_millis();
+
+        let dates = Arc::new(StringArray::from(vec![date; *records]));
+        let hours = Arc::new(StringArray::from(vec![hour; *records]));
+        let timestamps = Arc::new(Int64Array::from(vec![timestamp; *records]));
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                dates.clone(),
+                hours.clone(),
+                timestamps.clone(),
+                companies.clone(),
+                names.clone(),
+                scores.clone(),
+            ],
+        )
+        .unwrap();
 
         table = DeltaOps(table)
             .write(vec![batch])
