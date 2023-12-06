@@ -65,6 +65,8 @@
             }
           },
           "mappings": [],
+          "max": 100,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -107,13 +109,134 @@
             "uid": "P1809F7CD0C75ACF3"
           },
           "editorMode": "code",
-          "expr": "avg(irate(node_cpu_seconds_total{mode=\"idle\"}[1m])) by (instance) * 100",
+          "expr": "avg(irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) by (instance) * 100",
           "legendFormat": "idle",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "CPU Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "fieldMinMax": false,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "(node_memory_Buffers_bytes + node_memory_Cached_bytes) / 1024 / 1024 / 1024",
+          "interval": "",
+          "legendFormat": "cache",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "node_memory_MemFree_bytes / 1024 / 1024 / 1024",
+          "hide": false,
+          "legendFormat": "free",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "node_memory_SwapCached_bytes / 1024 / 1024 / 1024",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "swap",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Memory Usage (GBytes)",
       "type": "timeseries"
     },
     {
@@ -178,10 +301,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 0
+        "x": 0,
+        "y": 8
       },
-      "id": 3,
+      "id": 4,
       "options": {
         "legend": {
           "calcs": [],
@@ -201,8 +324,8 @@
             "uid": "P1809F7CD0C75ACF3"
           },
           "editorMode": "code",
-          "expr": "(node_memory_Buffers_bytes + node_memory_Cached_bytes) / 1024 / 1024",
-          "legendFormat": "cache",
+          "expr": "sum(irate(node_disk_written_bytes_total[5m]) / 1024 / 1024)",
+          "legendFormat": "write",
           "range": true,
           "refId": "A"
         },
@@ -212,11 +335,129 @@
             "uid": "P1809F7CD0C75ACF3"
           },
           "editorMode": "code",
-          "expr": "node_memory_MemFree_bytes / 1024 / 1024",
+          "expr": "sum(irate(node_disk_read_bytes_total[5m]) / 1024 / 1024)",
           "hide": false,
-          "legendFormat": "free",
+          "instant": false,
+          "legendFormat": "read",
           "range": true,
           "refId": "B"
+        }
+      ],
+      "title": "Disk Usage (MBytes)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": ["transmit"],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(node_network_transmit_bytes_total[5m]) / 1024 / 1024)",
+          "legendFormat": "transmit",
+          "range": true,
+          "refId": "A"
         },
         {
           "datasource": {
@@ -224,15 +465,15 @@
             "uid": "P1809F7CD0C75ACF3"
           },
           "editorMode": "code",
-          "expr": "node_memory_SwapCached_bytes / 1024 / 1024",
+          "expr": "sum(irate(node_network_receive_bytes_total[5m]) / 1024 / 1024)",
           "hide": false,
           "instant": false,
-          "legendFormat": "swap",
+          "legendFormat": "receive",
           "range": true,
-          "refId": "C"
+          "refId": "B"
         }
       ],
-      "title": "Memory Usage",
+      "title": "Network Usage (MBytes)",
       "type": "timeseries"
     }
   ],
@@ -243,7 +484,7 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
