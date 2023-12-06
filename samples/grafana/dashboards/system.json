@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 2,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -132,6 +132,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -176,7 +177,30 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": ["heap"],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -234,6 +258,19 @@
           "legendFormat": "swap",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "node_memory_AnonPages_bytes / 1024 / 1024 / 1024",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "heap",
+          "range": true,
+          "refId": "D"
         }
       ],
       "title": "Memory Usage (GBytes)",
@@ -489,8 +526,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "system",
-  "uid": "ff4273df-5e9f-4c4c-9551-a3111c0c8be2",
+  "title": "system0",
+  "uid": "ff4273df-5e9f-4c4c-9551-a3111c0c8be4",
   "version": 1,
   "weekStart": ""
 }
