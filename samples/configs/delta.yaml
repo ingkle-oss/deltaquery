@@ -26,7 +26,6 @@ tables:
     engine: "polars"
     filesystem: "minio"
     location: "s3://test1/"
-    predicates: "date,hour"
     useVersioning: false
   - name: "delta.default.cache"
     engine: "polars"

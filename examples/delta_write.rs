@@ -36,7 +36,7 @@ struct DSOption {
     date: Option<String>,
 
     #[arg(long, help = "Partitions")]
-    partitions: String,
+    partitions: Option<String>,
 
     #[arg(long, help = "Minutes")]
     minutes: i32,
@@ -52,7 +52,6 @@ async fn main() -> Result<(), deltalake::DeltaTableError> {
     let args = cmd.get_matches();
 
     let uri = args.get_one::<String>("uri").unwrap();
-    let partitions = args.get_one::<String>("partitions").unwrap();
     let minutes = args.get_one::<i32>("minutes").unwrap();
     let records = args.get_one::<usize>("records").unwrap();
 
@@ -135,11 +134,13 @@ async fn main() -> Result<(), deltalake::DeltaTableError> {
         )
         .unwrap();
 
-        table = DeltaOps(table)
-            .write(vec![batch])
-            .with_save_mode(SaveMode::Append)
-            .with_partition_columns(partitions.split(","))
-            .await?;
+        let mut builder = DeltaOps(table).write(vec![batch]);
+        builder = builder.with_save_mode(SaveMode::Append);
+        if let Some(partitions) = args.get_one::<String>("partitions") {
+            builder = builder.with_partition_columns(partitions.split(","));
+        }
+
+        table = builder.await?;
 
         datetime = datetime.add(Duration::minutes(1));
     }

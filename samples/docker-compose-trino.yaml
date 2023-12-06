@@ -19,6 +19,6 @@ services:
       /bin/sh -ce "
       trino --server trino:8080 --catalog delta --execute \"create schema if not exists delta.default\";
       trino --server trino:8080 --catalog delta --execute \"create table if not exists delta.default.test0 (timestamp BIGINT, date VARCHAR, hour VARCHAR, name VARCHAR, company VARCHAR, score INTEGER) with (location = 's3://test0/', partitioned_by = array['date', 'hour'])\";
-      trino --server trino:8080 --catalog delta --execute \"create table if not exists delta.default.test1 (timestamp BIGINT, date VARCHAR, hour VARCHAR, name VARCHAR, company VARCHAR, score INTEGER) with (location = 's3://test1/', partitioned_by = array['date', 'hour'])\";
+      trino --server trino:8080 --catalog delta --execute \"create table if not exists delta.default.test1 (timestamp BIGINT, date VARCHAR, hour VARCHAR, name VARCHAR, company VARCHAR, score INTEGER) with (location = 's3://test1/')\";
       exit 0;
       "
