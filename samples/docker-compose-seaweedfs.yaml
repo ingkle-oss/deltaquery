@@ -16,7 +16,7 @@ services:
       - 18080:18080
       - 9325:9325
     volumes:
-      - /opt:/data
+      - /data:/data
     depends_on:
       - seaweedfs_master
 
