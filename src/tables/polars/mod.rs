@@ -656,7 +656,11 @@ fn setup_duckdb(
             engine.execute(&format!("SET s3_region='{}'", s3_region), params![])?;
         }
         if let Some(s3_allow_http) = filesystem_options.get("AWS_ALLOW_HTTP") {
-            engine.execute(&format!("SET s3_use_ssl={}", s3_allow_http), params![])?;
+            if s3_allow_http == "true" {
+                engine.execute("SET s3_use_ssl=false", params![])?;
+            } else {
+                engine.execute("SET s3_use_ssl=true", params![])?;
+            }
         }
     }
 
