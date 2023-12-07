@@ -32,6 +32,7 @@ services:
       - 9326:9326
     volumes:
       - ./seaweedfs/filer.toml:/etc/seaweedfs/filer.toml
+      - /data:/data
     depends_on:
       - seaweedfs_master
       - seaweedfs_volume
@@ -45,7 +46,6 @@ services:
       - 9327:9327
     volumes:
       - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json
-      - /data:/data
     depends_on:
       - seaweedfs_master
       - seaweedfs_volume
