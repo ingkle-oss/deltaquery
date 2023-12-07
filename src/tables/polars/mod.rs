@@ -410,7 +410,7 @@ impl DQTable for DQPolarsTable {
                         }
                     }
 
-                    log::info!("files={:#?}", files);
+                    log::info!("files={:#?}, {}", files, files.len());
 
                     if self.use_record_caching {
                         let mut fetches = Vec::new();
