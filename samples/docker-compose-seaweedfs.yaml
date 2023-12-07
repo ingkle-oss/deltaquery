@@ -10,11 +10,13 @@ services:
 
   seaweedfs_volume:
     image: chrislusf/seaweedfs
-    command: volume -mserver="seaweedfs_master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325
+    command: volume -mserver="seaweedfs_master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325 -dir=/data
     ports:
       - 8080:8080
       - 18080:18080
       - 9325:9325
+    volumes:
+      - /opt:/data
     depends_on:
       - seaweedfs_master
 
