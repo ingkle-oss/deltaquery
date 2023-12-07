@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "user",
+      "credentials": [
+        {
+          "accessKey": "haruband",
+          "secretKey": "haru1004"
+        }
+      ],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}
