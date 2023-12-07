@@ -599,6 +599,13 @@ fn setup_duckdb(
     if let Some(memory_limit) = engine_options.get("memory_limit") {
         engine.execute(&format!("SET memory_limit='{}'", memory_limit), params![])?;
     }
+
+    if let Some(http_keep_alive) = engine_options.get("http_keep_alive") {
+        engine.execute(
+            &format!("SET http_keep_alive={}", http_keep_alive),
+            params![],
+        )?;
+    }
     if let Some(http_retries) = engine_options.get("http_retries") {
         engine.execute(&format!("SET http_retries={}", http_retries), params![])?;
     }
@@ -616,13 +623,6 @@ fn setup_duckdb(
     }
     if let Some(http_timeout) = engine_options.get("http_timeout") {
         engine.execute(&format!("SET http_timeout={}", http_timeout), params![])?;
-    }
-
-    if let Some(http_keep_alive) = engine_options.get("http_keep_alive") {
-        engine.execute(
-            &format!("SET http_keep_alive={}", http_keep_alive),
-            params![],
-        )?;
     }
 
     if let (Some(s3_access_key_id), Some(s3_secret_access_key)) = (
