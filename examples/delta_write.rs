@@ -134,7 +134,9 @@ async fn main() -> Result<(), deltalake::DeltaTableError> {
         )
         .unwrap();
 
-        let mut builder = DeltaOps(table).write(vec![batch]);
+        let mut builder = DeltaOps(table)
+            .write(vec![batch])
+            .with_target_file_size(1024 * 1024 * 1024 * 4);
         builder = builder.with_save_mode(SaveMode::Append);
         if let Some(partitions) = args.get_one::<String>("partitions") {
             builder = builder.with_partition_columns(partitions.split(","));
