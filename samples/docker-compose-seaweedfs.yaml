@@ -1,0 +1,58 @@
+version: "3.8"
+services:
+  seaweedfs_master:
+    image: chrislusf/seaweedfs
+    command: master -ip="seaweedfs_master" -ip.bind=0.0.0.0 -metricsPort=9324
+    ports:
+      - 9333:9333
+      - 19333:19333
+      - 9324:9324
+
+  seaweedfs_volume:
+    image: chrislusf/seaweedfs
+    command: volume -mserver="seaweedfs_master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325
+    ports:
+      - 8080:8080
+      - 18080:18080
+      - 9325:9325
+    depends_on:
+      - seaweedfs_master
+
+  seaweedfs_filer:
+    image: chrislusf/seaweedfs
+    command: filer -master="seaweedfs_master:9333" -ip.bind=0.0.0.0 -metricsPort=9326
+    ports:
+      - 8888:8888
+      - 18888:18888
+      - 9326:9326
+    depends_on:
+      - seaweedfs_master
+      - seaweedfs_volume
+
+  seaweedfs_s3:
+    image: chrislusf/seaweedfs
+    command: s3 -filer="seaweedfs_filer:8888" -ip.bind=0.0.0.0 -config=/etc/seaweedfs/s3.json -port=9000 -metricsPort=9327
+    ports:
+      - 9000:9000
+      - 9327:9327
+    volumes:
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json
+    depends_on:
+      - seaweedfs_master
+      - seaweedfs_volume
+      - seaweedfs_filer
+  seaweedfs_init:
+    image: minio/mc
+    restart: on-failure
+    volumes:
+      - ./samples:/opt/samples
+    depends_on:
+      - seaweedfs_s3
+    entrypoint: >
+      /bin/sh -ce "
+      /usr/bin/mc config host add weedfs http://seaweedfs_s3:9000 haruband haru1004;
+      /usr/bin/mc mb weedfs/test0;
+      /usr/bin/mc mb weedfs/test1;
+      /usr/bin/mc cp --recursive /opt/samples/delta/ weedfs/test0;
+      exit 0;
+      "
