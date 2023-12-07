@@ -599,6 +599,25 @@ fn setup_duckdb(
     if let Some(memory_limit) = engine_options.get("memory_limit") {
         engine.execute(&format!("SET memory_limit='{}'", memory_limit), params![])?;
     }
+    if let Some(http_retries) = engine_options.get("http_retries") {
+        engine.execute(&format!("SET http_retries={}", http_retries), params![])?;
+    }
+    if let Some(http_retry_backoff) = engine_options.get("http_retry_backoff") {
+        engine.execute(
+            &format!("SET http_retry_backoff={}", http_retry_backoff),
+            params![],
+        )?;
+    }
+    if let Some(http_retry_wait_ms) = engine_options.get("http_retry_wait_ms") {
+        engine.execute(
+            &format!("SET http_retry_wait_ms={}", http_retry_wait_ms),
+            params![],
+        )?;
+    }
+    if let Some(http_timeout) = engine_options.get("http_timeout") {
+        engine.execute(&format!("SET http_timeout={}", http_timeout), params![])?;
+    }
+
     if let Some(http_keep_alive) = engine_options.get("http_keep_alive") {
         engine.execute(
             &format!("SET http_keep_alive={}", http_keep_alive),
