@@ -10,7 +10,7 @@ services:
 
   seaweedfs_volume:
     image: chrislusf/seaweedfs
-    command: volume -mserver="seaweedfs_master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325 -dir=/data
+    command: volume -mserver="seaweedfs_master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325 -dir=/data/volume
     ports:
       - 8080:8080
       - 18080:18080
@@ -27,6 +27,8 @@ services:
       - 8888:8888
       - 18888:18888
       - 9326:9326
+    volumes:
+      - ./seaweedfs/filer.toml:/etc/seaweedfs/filer.toml
     depends_on:
       - seaweedfs_master
       - seaweedfs_volume
@@ -39,6 +41,7 @@ services:
       - 9327:9327
     volumes:
       - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json
+      - /data:/data
     depends_on:
       - seaweedfs_master
       - seaweedfs_volume
