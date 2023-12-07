@@ -599,6 +599,12 @@ fn setup_duckdb(
     if let Some(memory_limit) = engine_options.get("memory_limit") {
         engine.execute(&format!("SET memory_limit='{}'", memory_limit), params![])?;
     }
+    if let Some(http_keep_alive) = engine_options.get("http_keep_alive") {
+        engine.execute(
+            &format!("SET http_keep_alive={}", http_keep_alive),
+            params![],
+        )?;
+    }
 
     if let (Some(s3_access_key_id), Some(s3_secret_access_key)) = (
         filesystem_options.get("AWS_ACCESS_KEY_ID"),
@@ -631,11 +637,7 @@ fn setup_duckdb(
             engine.execute(&format!("SET s3_region='{}'", s3_region), params![])?;
         }
         if let Some(s3_allow_http) = filesystem_options.get("AWS_ALLOW_HTTP") {
-            if s3_allow_http == "true" {
-                engine.execute("SET s3_use_ssl=false", params![])?;
-            } else {
-                engine.execute("SET s3_use_ssl=true", params![])?;
-            }
+            engine.execute(&format!("SET s3_use_ssl={}", s3_allow_http), params![])?;
         }
     }
 
