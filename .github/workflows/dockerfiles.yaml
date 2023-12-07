@@ -1,0 +1,153 @@
+name: Build anything
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "Docker image name"
+        type: string
+        required: true
+      path:
+        description: "Path to Dockerfile"
+        type: string
+        required: true
+      build_runner:
+        description: "Github runners tag"
+        type: string
+        required: false
+        default: ubuntu-latest
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_PASSWORD:
+        required: true
+      SLACK_WEBHOOK_URL:
+        required: true
+
+jobs:
+  build:
+    runs-on: ${{ inputs.build_runner }}
+    outputs:
+      image_version: ${{ steps.meta.outputs.version }}
+      image_id: ${{ steps.build_push.outputs.imageid }}
+      commit_message: ${{ steps.commit_info.outputs.message }}
+      commit_hash: ${{ steps.commit_info.outputs.hash }}
+      author_name: ${{ steps.commit_info.outputs.author_name }}
+      author_email: ${{ steps.commit_info.outputs.author_email }}
+    steps:
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ inputs.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{date 'YYYYMMDD.HHmmss' tz='Asia/Seoul'}}-{{sha}},enable={{is_default_branch}}
+            type=match,event=tag,pattern=\d+-\d+-\d+
+
+      - name: Set up QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub
+        id: login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get head commit information
+        id: commit_info
+        run: |
+          echo "message=$(git log -n 1 --format=%B HEAD | head -n 1)" >> $GITHUB_OUTPUT
+          echo "hash=$(git log -n 1 --format=%H | head -n 1)" >> $GITHUB_OUTPUT
+          echo "author_name=$(git log -n 1 --format=%an | head -n 1)" >> $GITHUB_OUTPUT
+          echo "author_email=$(git log -n 1 --format=%ae | head -n 1)" >> $GITHUB_OUTPUT
+      - name: Build and push
+        id: build_push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          # FIXME linux/arm64 : RUN cargo build --release : error Updating git repository `https://github.com/awslabs/aws-sdk-rust `Exit 137
+          platforms: linux/amd64
+          file: ${{ inputs.path }}/dockerfile
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+  slack:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [build]
+    env:
+      TITLE_MESSAGE: ":white_circle: *Build Unknown*"
+    steps:
+      - name: Check if build was successful
+        id: check
+        run: |
+          if [ ${{ needs.build.result }} == 'success' ]; then
+            echo "Build succeed"
+            echo "TITLE_MESSAGE=:white_check_mark: *Build Success*" >> $GITHUB_ENV
+          elif [ ${{ needs.build.result }} == 'failure' ]; then
+            echo "Build failure"
+            echo ":TITLE_MESSAGE=:red_circle: *Build Failure*" >> $GITHUB_ENV
+          else
+            echo "Build unknown"
+            echo ":TITLE_MESSAGE=:white_circle: *Build Unknown*" >> $GITHUB_ENV
+          fi
+      - name: Send custom JSON data to Slack workflow
+        id: success
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ env.TITLE_MESSAGE }}"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Image*\nhttps://hub.docker.com/r/${{inputs.image}}/tags"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Commit*\n_Author_: ${{ needs.build.outputs.author_name }} (${{ needs.build.outputs.author_email }})\n_Message_: ${{ needs.build.outputs.commit_message }}\n_URL_: ${{ github.server_url }}/${{github.repository}}/commit/${{ needs.build.outputs.commit_hash }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Action*\n${{ github.server_url }}/${{github.repository}}/actions/runs/${{github.run_id}}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Event*\n*${{github.event_name}}* from *${{github.ref_name}}* branch/tag"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
