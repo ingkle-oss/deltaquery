@@ -9,7 +9,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--authorization", help="authorization", default="Basic YWRtaW46YWRtaW4K"
     )
-    parser.add_argument("--database", help="database", default="postgres")
     parser.add_argument("--table", help="table", default="delta.default.test0")
     parser.add_argument("--mode", help="mode", default="append")
     args = parser.parse_args()
@@ -19,9 +18,6 @@ if __name__ == "__main__":
         db_kwargs={
             DatabaseOptions.AUTHORIZATION_HEADER.value: args.authorization,
             DatabaseOptions.WITH_MAX_MSG_SIZE.value: "1073741824",
-        },
-        conn_kwargs={
-            "adbc.flight.sql.rpc.call_header.x-flight-sql-database": args.database
         },
     ) as conn:
         with conn.cursor() as cur:

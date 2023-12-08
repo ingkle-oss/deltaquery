@@ -40,9 +40,6 @@ pub struct DQOption {
     #[arg(short = 'w', long, help = "Target password")]
     password: Option<String>,
 
-    #[arg(short = 'd', long, help = "Target database")]
-    database: Option<String>,
-
     #[arg(short = 'q', long, help = "Target query")]
     query: String,
 
@@ -81,9 +78,6 @@ async fn main() -> Result<()> {
     let channel = endpoint.connect().await.unwrap();
 
     let mut client = FlightSqlServiceClient::new(channel);
-    if let Some(database) = args.get_one::<String>("database") {
-        client.set_header("x-flight-sql-database", database);
-    }
     if let Some(authorization) = args.get_one::<String>("authorization") {
         client.set_header("authorization", authorization);
     }
