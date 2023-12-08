@@ -14,10 +14,10 @@ To compile, run
 cargo build
 ```
 
-To execute sample [Minio](https://min.io/) and [Trino](https://trino.io/) servers using [Docker](https://www.docker.com/), run in the samples directory
+To execute sample [Minio](https://min.io/) server using [Docker](https://www.docker.com/), run in the samples directory
 
 ```bash
-docker-compose up
+docker-compose -f docker-compose-minio.yaml up
 ```
 
 To execute server, run

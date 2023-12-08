@@ -1,3 +1,2 @@
 adbc_driver_manager
 adbc_driver_flightsql
-adbc_driver_postgresql
