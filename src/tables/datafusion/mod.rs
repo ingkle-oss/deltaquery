@@ -4,9 +4,14 @@ use crate::error::DQError;
 use crate::metadata::DQMetadataMap;
 use crate::state::DQState;
 use crate::table::{DQTable, DQTableFactory};
+use arrow_array::cast::AsArray;
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
+use datafusion_common::cast::as_string_array;
 use deltalake::arrow::datatypes::Schema;
+use deltalake::datafusion::common::ToDFSchema;
+use deltalake::datafusion::physical_expr::create_physical_expr;
+use deltalake::datafusion::physical_expr::execution_props::ExecutionProps;
 use deltalake::kernel::{Action, Add, Metadata, Protocol};
 use deltalake::logstore::default_logstore::DefaultLogStore;
 use deltalake::logstore::LogStoreRef;
@@ -19,10 +24,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use url::Url;
 
+mod predicates;
 mod statistics;
-
-const STATS_TABLE_ADD_PATH: &str = "__path__";
-const STATS_TABLE_CHUNKS_MAX: usize = 16;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -255,6 +258,62 @@ impl DQTable for DQDatafusionTable {
                             }
                             _ => unimplemented!(),
                         }
+                    }
+
+                    if let (Some(selection), Some(batch0)) = (&select.selection, self.stats.first())
+                    {
+                        let expressions = predicates::parse_expression(
+                            &selection,
+                            &self
+                                .schema
+                                .fields
+                                .iter()
+                                .map(|field| field.name().as_str())
+                                .collect(),
+                            false,
+                        );
+
+                        log::info!("filters={:#?}", expressions);
+
+                        let schema = batch0.schema();
+                        let predicates = create_physical_expr(
+                            &expressions,
+                            &schema.clone().to_dfschema().unwrap(),
+                            &schema,
+                            &ExecutionProps::new(),
+                        )?;
+
+                        for batch in self.stats.iter() {
+                            let results = predicates
+                                .evaluate(&batch)
+                                .ok()
+                                .unwrap()
+                                .into_array(batch.num_rows())
+                                .unwrap();
+                            let paths = as_string_array(
+                                batch
+                                    .column_by_name(statistics::STATS_TABLE_ADD_PATH)
+                                    .unwrap(),
+                            )?;
+                            for (result, path) in results.as_boolean().iter().zip(paths) {
+                                if let (Some(result), Some(path)) = (result, path) {
+                                    if result {
+                                        files.push(format!(
+                                            "{}/{}",
+                                            self.location,
+                                            path.to_string()
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        files.extend(
+                            self.files
+                                .keys()
+                                .map(|path| format!("{}/{}", self.location, path))
+                                .collect::<Vec<_>>(),
+                        );
                     }
 
                     if files.len() > 0 {

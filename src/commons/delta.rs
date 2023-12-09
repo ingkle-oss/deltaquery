@@ -1,4 +1,3 @@
-use crate::error::DQError;
 use deltalake::kernel::Action;
 use deltalake::logstore::LogStoreRef;
 use deltalake::parquet::file::reader::FileReader;

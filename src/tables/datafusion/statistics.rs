@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-const STATS_TABLE_ADD_PATH: &str = "__path__";
+pub const STATS_TABLE_ADD_PATH: &str = "__path__";
 
 fn get_scalar_value_for_null(datatype: &DataType) -> Result<ScalarValue, DeltaTableError> {
     match datatype {
