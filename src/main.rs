@@ -5,6 +5,7 @@ use deltaquery::servers::delta::FlightSqlServiceDelta;
 use deltaquery::servers::simple::FlightSqlServiceSimple;
 use deltaquery::state::DQState;
 use deltaquery::table::register_table_factory;
+use deltaquery::tables::datafusion::DQDatafusionTableFactory;
 use deltaquery::tables::polars::DQPolarsTableFactory;
 use env_logger::Builder;
 use std::env;
@@ -90,6 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     register_table_factory("polars", Box::new(DQPolarsTableFactory::new())).await;
+    register_table_factory("datafusion", Box::new(DQDatafusionTableFactory::new())).await;
 
     let state = Arc::new(Mutex::new(DQState::new(config.clone()).await));
     handle_state(state.clone());

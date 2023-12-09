@@ -3,6 +3,7 @@ use deltalake::kernel::Action;
 use deltalake::logstore::LogStoreRef;
 use deltalake::parquet::file::reader::FileReader;
 use deltalake::parquet::file::reader::SerializedFileReader;
+use deltalake::ObjectStoreError;
 use deltalake::Path;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Cursor};
@@ -16,12 +17,12 @@ pub struct DQDeltaCheckpoint {
     pub num_of_add_files: Option<i64>,
 }
 
-pub async fn get_last_checkpoint(store: &LogStoreRef) -> Result<DQDeltaCheckpoint, DQError> {
+pub async fn get_last_checkpoint(
+    store: &LogStoreRef,
+) -> Result<DQDeltaCheckpoint, ObjectStoreError> {
     let last_checkpoint_path = Path::from_iter(["_delta_log", "_last_checkpoint"]);
-    match store.object_store().get(&last_checkpoint_path).await {
-        Ok(data) => Ok(serde_json::from_slice(&data.bytes().await.unwrap()).unwrap()),
-        Err(err) => Err(DQError::from(err)),
-    }
+    let data = store.object_store().get(&last_checkpoint_path).await?;
+    Ok(serde_json::from_slice(&data.bytes().await.unwrap()).unwrap())
 }
 
 fn get_checkpoint_paths(store: &LogStoreRef, checkpoint: &DQDeltaCheckpoint) -> Vec<Path> {
@@ -91,21 +92,20 @@ fn get_commit_path(version: i64) -> Path {
     log_path.child(version.as_str())
 }
 
-pub async fn peek_commit(store: &LogStoreRef, version: i64) -> Result<Vec<Action>, DQError> {
+pub async fn peek_commit(
+    store: &LogStoreRef,
+    version: i64,
+) -> Result<Vec<Action>, ObjectStoreError> {
     let commit_path = get_commit_path(version);
-    match store.object_store().get(&commit_path).await {
-        Ok(data) => {
-            let reader = BufReader::new(Cursor::new(data.bytes().await.unwrap()));
+    let data = store.object_store().get(&commit_path).await?;
+    let reader = BufReader::new(Cursor::new(data.bytes().await.unwrap()));
 
-            let mut actions = Vec::new();
+    let mut actions = Vec::new();
 
-            for line in reader.lines() {
-                let action: Action = serde_json::from_str(line.unwrap().as_str()).unwrap();
-                actions.push(action);
-            }
-
-            Ok(actions)
-        }
-        Err(err) => Err(DQError::from(err)),
+    for line in reader.lines() {
+        let action: Action = serde_json::from_str(line.unwrap().as_str()).unwrap();
+        actions.push(action);
     }
+
+    Ok(actions)
 }

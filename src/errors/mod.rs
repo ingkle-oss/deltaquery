@@ -1,5 +1,7 @@
 pub mod arrow;
 pub mod base64;
+pub mod datafusion;
+pub mod deltalake;
 pub mod duckdb;
 pub mod polars;
 pub mod sqlparser;

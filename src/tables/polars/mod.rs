@@ -202,9 +202,7 @@ impl DQPolarsTable {
 
                     version = version + 1;
                 }
-                Err(DQError::ObjectStore {
-                    source: ObjectStoreError::NotFound { .. },
-                }) => {
+                Err(ObjectStoreError::NotFound { .. }) => {
                     break;
                 }
                 Err(err) => panic!("could not peek commit: {:?}", err),
