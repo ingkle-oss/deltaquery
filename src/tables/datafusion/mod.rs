@@ -319,16 +319,15 @@ impl DQTable for DQDatafusionTable {
                     if files.len() > 0 {
                         let engine = self.engine.lock().await;
 
+                        let files = files
+                            .iter()
+                            .map(|file| format!("'{}'", file))
+                            .collect::<Vec<String>>()
+                            .join(",");
+
                         let mut stmt = engine.prepare(&statement.to_string().replace(
                             &from,
-                            &format!(
-                                    "read_parquet([{}], union_by_name=true)",
-                                    files
-                                        .iter()
-                                        .map(|file| format!("'{}'", file))
-                                        .collect::<Vec<String>>()
-                                        .join(",")
-                                    ),
+                            &format!("read_parquet([{}], union_by_name=true)", files),
                         ))?;
 
                         batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());

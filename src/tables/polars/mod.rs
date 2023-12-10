@@ -6,14 +6,13 @@ use crate::state::DQState;
 use crate::table::{DQTable, DQTableFactory};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
-use deltalake::arrow::datatypes::{DataType, FieldRef, Schema};
+use deltalake::arrow::datatypes::{DataType, Schema};
 use deltalake::kernel::{Action, Add, Metadata, Protocol};
 use deltalake::logstore::default_logstore::DefaultLogStore;
 use deltalake::logstore::LogStoreRef;
 use deltalake::ObjectStoreError;
 use duckdb::{params, Connection};
 use polars::prelude::*;
-use serde_json::Value;
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -26,9 +25,7 @@ use tokio::sync::Mutex;
 use url::Url;
 
 mod predicates;
-
-const STATS_TABLE_ADD_PATH: &str = "__path__";
-const STATS_TABLE_CHUNKS_MAX: usize = 16;
+mod statistics;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -210,12 +207,16 @@ impl DQPolarsTable {
         }
 
         if actions.len() > 0 {
-            let stats = get_statistics(&actions, &self.schema, self.predicates.as_ref());
+            let stats = statistics::get_dataframe_from_actions(
+                &actions,
+                &self.schema,
+                self.predicates.as_ref(),
+            );
             self.stats = concat(
                 [self.stats.clone().lazy(), stats.lazy()],
                 UnionArgs {
                     parallel: true,
-                    rechunk: if self.stats.n_chunks() >= STATS_TABLE_CHUNKS_MAX {
+                    rechunk: if self.stats.n_chunks() >= statistics::STATS_TABLE_CHUNKS_MAX {
                         true
                     } else {
                         false
@@ -335,7 +336,11 @@ impl DQTable for DQPolarsTable {
                 let actions = delta::peek_checkpoint(&self.store, &checkpoint).await;
                 self.update_actions(&actions, 0);
 
-                self.stats = get_statistics(&actions, &self.schema, self.predicates.as_ref());
+                self.stats = statistics::get_dataframe_from_actions(
+                    &actions,
+                    &self.schema,
+                    self.predicates.as_ref(),
+                );
 
                 self.version = checkpoint.version;
 
@@ -393,7 +398,7 @@ impl DQTable for DQPolarsTable {
                     };
 
                     unsafe {
-                        for chunk in stats[STATS_TABLE_ADD_PATH].chunks() {
+                        for chunk in stats[statistics::STATS_TABLE_ADD_PATH].chunks() {
                             for index in 0..chunk.len() {
                                 if let AnyValue::Utf8(path) = chunk.get_unchecked(index) {
                                     if let Some(DQPolarsFile { add, .. }) = self.files.get(path) {
@@ -663,168 +668,6 @@ fn setup_duckdb(
     }
 
     Ok(())
-}
-
-fn get_statistics(
-    actions: &Vec<Action>,
-    schema: &Schema,
-    predicates: Option<&Vec<String>>,
-) -> DataFrame {
-    let fields = match predicates {
-        Some(predicates) => schema
-            .fields()
-            .iter()
-            .filter(|field| predicates.contains(field.name()))
-            .collect::<Vec<&FieldRef>>(),
-        None => schema.fields().iter().collect::<Vec<&FieldRef>>(),
-    };
-    let mut columns = HashMap::<String, Vec<Value>>::new();
-
-    let mut paths = Vec::new();
-
-    for action in actions {
-        if let Action::Add(add) = action {
-            let partitions = &add.partition_values;
-            let stats = add.get_stats().unwrap();
-            for field in &fields {
-                if partitions.contains_key(field.name()) {
-                    let value = match partitions.get(field.name()).unwrap() {
-                        Some(value) => Value::String(value.to_string()),
-                        None => Value::Null,
-                    };
-
-                    match columns.get_mut(field.name()) {
-                        Some(rows) => {
-                            rows.push(value);
-                        }
-                        None => {
-                            let mut rows = Vec::new();
-                            rows.push(value);
-
-                            columns.insert(field.name().clone(), rows);
-                        }
-                    }
-                } else if let Some(stats) = stats.as_ref() {
-                    if stats.min_values.contains_key(field.name()) {
-                        let name = field.name();
-                        let value = stats
-                            .min_values
-                            .get(field.name())
-                            .unwrap()
-                            .as_value()
-                            .unwrap();
-
-                        match columns.get_mut(name) {
-                            Some(rows) => {
-                                rows.push(value.clone());
-                            }
-                            None => {
-                                let mut rows = Vec::new();
-                                rows.push(value.clone());
-
-                                columns.insert(name.clone(), rows);
-                            }
-                        }
-                    }
-                    if stats.max_values.contains_key(field.name()) {
-                        let name = [field.name(), "max"].join(".");
-                        let value = stats
-                            .max_values
-                            .get(field.name())
-                            .unwrap()
-                            .as_value()
-                            .unwrap();
-
-                        match columns.get_mut(&name) {
-                            Some(rows) => {
-                                rows.push(value.clone());
-                            }
-                            None => {
-                                let mut rows = Vec::new();
-                                rows.push(value.clone());
-
-                                columns.insert(name.clone(), rows);
-                            }
-                        }
-                    }
-                }
-            }
-
-            paths.push(add.path.clone());
-        }
-    }
-
-    let mut series = Vec::new();
-
-    for field in &fields {
-        let name = field.name();
-        if let Some(rows) = columns.get(name) {
-            series.push(match field.data_type() {
-                DataType::Utf8 => Series::new(
-                    name,
-                    rows.iter()
-                        .map(|value| value.as_str().unwrap())
-                        .collect::<Vec<&str>>(),
-                ),
-                DataType::Int32 => Series::new(
-                    name,
-                    rows.iter()
-                        .map(|value| value.as_i64().unwrap() as i32)
-                        .collect::<Vec<i32>>(),
-                ),
-                DataType::Int64 => Series::new(
-                    name,
-                    rows.iter()
-                        .map(|value| value.as_i64().unwrap())
-                        .collect::<Vec<i64>>(),
-                ),
-                DataType::Date32 => Series::new(
-                    name,
-                    rows.iter()
-                        .map(|value| value.as_str().unwrap())
-                        .collect::<Vec<&str>>(),
-                ),
-                _ => unimplemented!(),
-            })
-        }
-    }
-
-    for field in &fields {
-        let name = [field.name(), "max"].join(".");
-        if let Some(rows) = columns.get(&name) {
-            series.push(match field.data_type() {
-                DataType::Utf8 => Series::new(
-                    &name,
-                    rows.iter()
-                        .map(|value| value.as_str().unwrap())
-                        .collect::<Vec<&str>>(),
-                ),
-                DataType::Int32 => Series::new(
-                    &name,
-                    rows.iter()
-                        .map(|value| value.as_i64().unwrap() as i32)
-                        .collect::<Vec<i32>>(),
-                ),
-                DataType::Int64 => Series::new(
-                    &name,
-                    rows.iter()
-                        .map(|value| value.as_i64().unwrap())
-                        .collect::<Vec<i64>>(),
-                ),
-                DataType::Date32 => Series::new(
-                    &name,
-                    rows.iter()
-                        .map(|value| value.as_str().unwrap())
-                        .collect::<Vec<&str>>(),
-                ),
-                _ => unimplemented!(),
-            })
-        }
-    }
-
-    series.push(Series::new(STATS_TABLE_ADD_PATH, paths));
-
-    DataFrame::new(series).unwrap()
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
