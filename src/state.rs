@@ -76,7 +76,7 @@ impl DQState {
                     )
                     .await
                     {
-                        let mut table = DQTable { storage, compute };
+                        let mut table = DQTable::new(storage, compute);
                         let _ = table.update().await;
 
                         self.tables.insert(target.clone(), table);

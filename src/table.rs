@@ -10,6 +10,10 @@ pub struct DQTable {
 }
 
 impl DQTable {
+    pub fn new(storage: Box<dyn DQStorage>, compute: Box<dyn DQCompute>) -> Self {
+        DQTable { storage, compute }
+    }
+
     pub async fn update(&mut self) -> Result<(), DQError> {
         self.storage.update().await?;
 
