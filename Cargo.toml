@@ -33,6 +33,12 @@ arrow-schema = { version = "48" }
 arrow-select = { version = "48" }
 arrow-ipc = { version = "48", features = ["zstd"] }
 arrow-flight = { version = "48", features = ["flight-sql-experimental"] }
+datafusion = { version = "33.0.0" }
+datafusion-expr = { version = "33.0.0" }
+datafusion-common = { version = "33.0.0" }
+datafusion-proto = { version = "33.0.0" }
+datafusion-sql = { version = "33.0.0" }
+datafusion-physical-expr = { version = "33.0.0" }
 base64 = { version = "0.21", default-features = false, features = ["std"] }
 bytes = { version = "1", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
