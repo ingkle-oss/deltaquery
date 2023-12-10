@@ -1,9 +1,9 @@
 use crate::error::DQError;
+use arrow::array::RecordBatch;
 use arrow::compute::{cast_with_options, CastOptions};
-use arrow_array::RecordBatch;
-use datafusion_common::scalar::ScalarValue;
-use datafusion_common::DataFusionError;
-use deltalake::arrow::datatypes::{DataType, Field, FieldRef, Schema, TimeUnit};
+use arrow::datatypes::{DataType, Field, FieldRef, Schema, TimeUnit};
+use deltalake::datafusion::common::scalar::ScalarValue;
+use deltalake::datafusion::common::DataFusionError;
 use deltalake::kernel::Action;
 use deltalake::DeltaTableError;
 use serde_json::Value;

@@ -1,5 +1,5 @@
 use crate::error::DQError;
-use arrow_array::RecordBatch;
+use arrow::array::RecordBatch;
 use arrow_flight::{FlightData, SchemaAsIpc};
 use arrow_ipc::writer::{DictionaryTracker, IpcDataGenerator, IpcWriteOptions};
 use arrow_ipc::{CompressionType, MetadataVersion};

@@ -2,8 +2,8 @@ use crate::commons::flight;
 use crate::error::DQError;
 use crate::servers::FetchResults;
 use crate::state::DQState;
-use arrow_array::builder::StringBuilder;
-use arrow_array::{ArrayRef, RecordBatch};
+use arrow::array::builder::StringBuilder;
+use arrow::array::{ArrayRef, RecordBatch};
 use arrow_flight::encode::FlightDataEncoderBuilder;
 use arrow_flight::sql::metadata::{
     SqlInfoData, SqlInfoDataBuilder, XdbcTypeInfo, XdbcTypeInfoData, XdbcTypeInfoDataBuilder,

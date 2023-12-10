@@ -1,7 +1,7 @@
 use crate::compute::DQCompute;
 use crate::error::DQError;
 use crate::storage::DQStorage;
-use arrow_array::RecordBatch;
+use arrow::array::RecordBatch;
 use sqlparser::ast::Statement;
 
 pub struct DQTable {

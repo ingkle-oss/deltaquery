@@ -1,11 +1,11 @@
-use arrow_array::Int64Array;
-use chrono::{DateTime, Duration, NaiveDate, Utc};
-use clap::{Args, Command};
-use deltalake::arrow::{
+use arrow::array::Int64Array;
+use arrow::{
     array::{Int32Array, StringArray},
     datatypes::{DataType, Field, Schema as ArrowSchema},
     record_batch::RecordBatch,
 };
+use chrono::{DateTime, Duration, NaiveDate, Utc};
+use clap::{Args, Command};
 use deltalake::DeltaTableBuilder;
 use deltalake::{protocol::SaveMode, DeltaOps};
 use fake::faker::company::en::Industry;
