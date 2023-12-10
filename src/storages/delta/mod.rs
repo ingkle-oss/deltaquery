@@ -136,6 +136,17 @@ impl DQDeltaStorage {
         Ok(())
     }
 
+    fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), DQError> {
+        let batch = statistics::get_record_batch_from_actions(
+            &actions,
+            &self.schema,
+            self.predicates.as_ref(),
+        )?;
+        self.stats.push(batch);
+
+        Ok(())
+    }
+
     async fn update_commits(&mut self) -> Result<(), DQError> {
         let mut actions = Vec::new();
 
@@ -158,12 +169,7 @@ impl DQDeltaStorage {
         }
 
         if actions.len() > 0 {
-            let stats = statistics::get_record_batch_from_actions(
-                &actions,
-                &self.schema,
-                self.predicates.as_ref(),
-            )?;
-            self.stats.push(stats);
+            self.update_stats(&actions)?;
 
             self.version = version;
 
@@ -185,13 +191,7 @@ impl DQStorage for DQDeltaStorage {
             } else if let Ok(checkpoint) = delta::get_last_checkpoint(&self.store).await {
                 let actions = delta::peek_checkpoint(&self.store, &checkpoint).await;
                 self.update_actions(&actions, 0)?;
-
-                let stats = statistics::get_record_batch_from_actions(
-                    &actions,
-                    &self.schema,
-                    self.predicates.as_ref(),
-                )?;
-                self.stats.push(stats);
+                self.update_stats(&actions)?;
 
                 self.version = checkpoint.version;
 
