@@ -1,26 +1,11 @@
 use crate::compute::create_compute_using_factory;
-use crate::compute::DQCompute;
 use crate::configs::{DQConfig, DQTableConfig};
-use crate::error::DQError;
 use crate::storage::create_storage_using_factory;
-use crate::storage::DQStorage;
+use crate::table::DQTable;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use std::collections::hash_map::IterMut;
 use std::collections::HashMap;
-
-pub struct DQTable {
-    pub storage: Box<dyn DQStorage>,
-    pub compute: Box<dyn DQCompute>,
-}
-
-impl DQTable {
-    pub async fn update(&mut self) -> Result<(), DQError> {
-        self.storage.update().await?;
-
-        Ok(())
-    }
-}
 
 pub struct DQState {
     config: DQConfig,

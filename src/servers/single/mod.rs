@@ -237,8 +237,7 @@ impl FlightSqlService for FlightSqlServiceSingle {
                     let mut state = self.state.lock().await;
 
                     if let Some(table) = state.get_table(&table).await {
-                        let files = table.storage.execute(statement).await?;
-                        let batches = table.compute.execute(statement, files).await?;
+                        let batches = table.execute(statement).await?;
                         if let Ok(Some(flight_info)) =
                             self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
                         {

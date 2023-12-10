@@ -8,3 +8,4 @@ pub mod servers;
 pub mod state;
 pub mod storage;
 pub mod storages;
+pub mod table;
