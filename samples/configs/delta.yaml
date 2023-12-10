@@ -1,14 +1,14 @@
 version: 1
-server: "delta"
+server: "single"
 listen: "0.0.0.0:32010"
-engines:
-  - name: "polars"
-    type: "polars"
+storages:
+  - name: "delta"
+    type: "delta"
+computes:
+  - name: "duckdb"
+    type: "duckdb"
     configs:
       memory_limit: "-1"
-  - name: "datafusion"
-    type: "datafusion"
-    configs:
 filesystems:
   - name: "minio"
     configs:
@@ -20,28 +20,21 @@ filesystems:
       AWS_ALLOW_HTTP: "true"
 tables:
   - name: "delta.default.test0"
-    engine: "polars"
+    storage: "delta"
+    compute: "duckdb"
     filesystem: "minio"
     location: "s3://test0/"
     predicates: "date,hour"
     useVersioning: false
   - name: "delta.default.test1"
-    engine: "polars"
+    storage: "delta"
+    compute: "duckdb"
     filesystem: "minio"
     location: "s3://test1/"
     useVersioning: false
-  - name: "delta.default.cache"
-    engine: "polars"
-    filesystem: "minio"
-    location: "s3://test0/"
-    predicates: "date,hour"
-    useVersioning: false
-    useParquetCaching: true
-    cachingLocation: "/tmp/deltaquery"
-    cachingRetention: 5s
-    cachingCodec: "zstd"
   - name: "delta.default.local"
-    engine: "datafusion"
+    storage: "delta"
+    compute: "duckdb"
     location: "file:///Users/haruband/Documents/deltaquery/samples/samples/delta/"
     predicates: "date,hour"
     useVersioning: false

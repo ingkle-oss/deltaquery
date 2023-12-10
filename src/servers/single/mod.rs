@@ -49,7 +49,7 @@ macro_rules! status {
 
 static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
     let mut builder = SqlInfoDataBuilder::new();
-    builder.append(SqlInfo::FlightSqlServerName, "DeltaQuery Flight SQL Server");
+    builder.append(SqlInfo::FlightSqlServerName, "Single Flight SQL Server");
     builder.append(SqlInfo::FlightSqlServerVersion, "1");
     builder.append(SqlInfo::FlightSqlServerArrowVersion, "1.3");
     builder.build().unwrap()
@@ -57,14 +57,14 @@ static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct FlightSqlServiceDeltaConfig {
+pub struct FlightSqlServiceSingleConfig {
     compression: Option<String>,
     endpoint: Option<String>,
     port: Option<u16>,
 }
 
 #[derive(Clone)]
-pub struct FlightSqlServiceDelta {
+pub struct FlightSqlServiceSingle {
     state: Arc<Mutex<DQState>>,
 
     compression: Option<CompressionType>,
@@ -73,9 +73,9 @@ pub struct FlightSqlServiceDelta {
     handles: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
 }
 
-impl FlightSqlServiceDelta {
+impl FlightSqlServiceSingle {
     pub async fn new(state: Arc<Mutex<DQState>>, catalog: serde_yaml::Value) -> Self {
-        let config: FlightSqlServiceDeltaConfig = serde_yaml::from_value(catalog).unwrap();
+        let config: FlightSqlServiceSingleConfig = serde_yaml::from_value(catalog).unwrap();
 
         let compression = match config.compression.as_deref() {
             Some("zstd") => Some(CompressionType::ZSTD),
@@ -93,7 +93,7 @@ impl FlightSqlServiceDelta {
             None => 32010,
         };
 
-        FlightSqlServiceDelta {
+        FlightSqlServiceSingle {
             state,
             compression,
             endpoint: format!("grpc://{}:{}", endpoint, port),
@@ -158,8 +158,8 @@ impl FlightSqlServiceDelta {
 }
 
 #[tonic::async_trait]
-impl FlightSqlService for FlightSqlServiceDelta {
-    type FlightService = FlightSqlServiceDelta;
+impl FlightSqlService for FlightSqlServiceSingle {
+    type FlightService = FlightSqlServiceSingle;
 
     async fn do_handshake(
         &self,
@@ -237,9 +237,7 @@ impl FlightSqlService for FlightSqlServiceDelta {
                     let mut state = self.state.lock().await;
 
                     if let Some(table) = state.get_table(&table).await {
-                        let metadata = HashMap::new();
-
-                        let batches = table.select(statement, &metadata).await?;
+                        let batches = table.execute(statement).await?;
                         if let Ok(Some(flight_info)) =
                             self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
                         {

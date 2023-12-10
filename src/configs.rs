@@ -4,9 +4,21 @@ use struct_field_names_as_array::FieldNamesAsArray;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct DQEngineConfig {
+pub struct DQStorageConfig {
     pub name: String,
     pub r#type: String,
+
+    #[serde(default)]
+    pub configs: HashMap<String, String>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DQComputeConfig {
+    pub name: String,
+    pub r#type: String,
+
+    #[serde(default)]
     pub configs: HashMap<String, String>,
 }
 
@@ -14,6 +26,8 @@ pub struct DQEngineConfig {
 #[serde(rename_all = "camelCase")]
 pub struct DQFilesystemConfig {
     pub name: String,
+
+    #[serde(default)]
     pub configs: HashMap<String, String>,
 }
 
@@ -22,17 +36,12 @@ pub struct DQFilesystemConfig {
 #[serde(rename_all = "camelCase")]
 pub struct DQTableConfig {
     pub name: String,
-    pub engine: String,
+    pub storage: String,
+    pub compute: String,
     pub filesystem: Option<String>,
     pub location: String,
     pub predicates: Option<String>,
     pub use_versioning: Option<bool>,
-    pub use_record_caching: Option<bool>,
-    pub use_parquet_caching: Option<bool>,
-    pub caching_location: Option<String>,
-    pub caching_retention: Option<String>,
-    pub caching_codec: Option<String>,
-    pub caching_with_partitions: Option<bool>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -62,7 +71,10 @@ pub struct DQConfig {
     pub tls: Option<DQTlsConfig>,
 
     #[serde(default)]
-    pub engines: Vec<DQEngineConfig>,
+    pub storages: Vec<DQStorageConfig>,
+
+    #[serde(default)]
+    pub computes: Vec<DQComputeConfig>,
 
     #[serde(default)]
     pub filesystems: Vec<DQFilesystemConfig>,

@@ -1,12 +1,13 @@
 use arrow_flight::flight_service_server::FlightServiceServer;
 use clap::{Args, Command};
+use deltaquery::compute::register_compute_factory;
+use deltaquery::computes::duckdb::DQDuckDBComputeFactory;
 use deltaquery::configs::DQConfig;
-use deltaquery::servers::delta::FlightSqlServiceDelta;
 use deltaquery::servers::simple::FlightSqlServiceSimple;
+use deltaquery::servers::single::FlightSqlServiceSingle;
 use deltaquery::state::DQState;
-use deltaquery::table::register_table_factory;
-use deltaquery::tables::datafusion::DQDatafusionTableFactory;
-use deltaquery::tables::polars::DQPolarsTableFactory;
+use deltaquery::storage::register_storage_factory;
+use deltaquery::storages::delta::DQDeltaStorageFactory;
 use env_logger::Builder;
 use std::env;
 use std::fs::File;
@@ -90,8 +91,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => serde_yaml::Value::default(),
     };
 
-    register_table_factory("polars", Box::new(DQPolarsTableFactory::new())).await;
-    register_table_factory("datafusion", Box::new(DQDatafusionTableFactory::new())).await;
+    register_storage_factory("delta", Box::new(DQDeltaStorageFactory::new())).await;
+    register_compute_factory("duckdb", Box::new(DQDuckDBComputeFactory::new())).await;
 
     let state = Arc::new(Mutex::new(DQState::new(config.clone()).await));
     handle_state(state.clone());
@@ -111,8 +112,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let router = match config.server.as_str() {
-        "delta" => server.add_service(FlightServiceServer::new(
-            FlightSqlServiceDelta::new(state.clone(), catalog).await,
+        "single" => server.add_service(FlightServiceServer::new(
+            FlightSqlServiceSingle::new(state.clone(), catalog).await,
         )),
         _ => server.add_service(FlightServiceServer::new(
             FlightSqlServiceSimple::new(state.clone(), catalog).await,

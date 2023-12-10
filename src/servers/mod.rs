@@ -1,7 +1,7 @@
 use arrow_flight::sql::{Any, ProstMessageExt};
 
-pub mod delta;
 pub mod simple;
+pub mod single;
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FetchResults {

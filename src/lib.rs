@@ -1,9 +1,11 @@
 pub mod commons;
+pub mod compute;
+pub mod computes;
 pub mod configs;
 pub mod error;
 pub mod errors;
-pub mod metadata;
 pub mod servers;
 pub mod state;
+pub mod storage;
+pub mod storages;
 pub mod table;
-pub mod tables;
