@@ -1,6 +1,6 @@
 use crate::configs::{DQComputeConfig, DQFilesystemConfig};
 use crate::error::DQError;
-use arrow_array::RecordBatch;
+use arrow::array::RecordBatch;
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use sqlparser::ast::Statement;

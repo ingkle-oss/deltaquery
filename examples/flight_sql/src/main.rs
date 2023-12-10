@@ -1,5 +1,5 @@
 use anyhow::Result;
-use arrow_array::RecordBatch;
+use arrow::array::RecordBatch;
 use arrow_cast::pretty::pretty_format_batches;
 use arrow_flight::{sql::client::FlightSqlServiceClient, FlightInfo};
 use arrow_schema::Schema;

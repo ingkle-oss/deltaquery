@@ -3,7 +3,7 @@ use crate::commons::sql;
 use crate::error::DQError;
 use crate::servers::FetchResults;
 use crate::state::DQState;
-use arrow_array::RecordBatch;
+use arrow::array::RecordBatch;
 use arrow_flight::encode::FlightDataEncoderBuilder;
 use arrow_flight::sql::metadata::{SqlInfoData, SqlInfoDataBuilder};
 use arrow_flight::sql::server::PeekableFlightDataStream;
