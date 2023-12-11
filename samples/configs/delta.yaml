@@ -25,16 +25,16 @@ tables:
     filesystem: "minio"
     location: "s3://test0/"
     predicates: "date,hour"
-    useVersioning: false
+    use_versioning: false
   - name: "delta.default.test1"
     storage: "delta"
     compute: "duckdb"
     filesystem: "minio"
     location: "s3://test1/"
-    useVersioning: false
+    use_versioning: false
   - name: "delta.default.local"
     storage: "delta"
     compute: "duckdb"
     location: "file:///Users/haruband/Documents/deltaquery/samples/samples/delta/"
     predicates: "date,hour"
-    useVersioning: false
+    use_versioning: false
