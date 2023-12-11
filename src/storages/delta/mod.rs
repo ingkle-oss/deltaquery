@@ -11,12 +11,11 @@ use deltalake::datafusion::common::ToDFSchema;
 use deltalake::datafusion::physical_expr::create_physical_expr;
 use deltalake::datafusion::physical_expr::execution_props::ExecutionProps;
 use deltalake::kernel::{Action, Add, Metadata, Protocol};
-use deltalake::logstore::default_logstore::DefaultLogStore;
 use deltalake::logstore::LogStoreRef;
+use deltalake::storage::config::configure_log_store;
 use deltalake::ObjectStoreError;
 use sqlparser::ast::{SetExpr, Statement};
 use std::collections::HashMap;
-use std::sync::Arc;
 use url::Url;
 
 mod predicates;
@@ -69,7 +68,7 @@ impl DQDeltaStorage {
         } else {
             location
         };
-        let store = Arc::new(DefaultLogStore::try_new(url, filesystem_options.clone()).unwrap());
+        let store = configure_log_store(url.as_str(), filesystem_options, None).unwrap();
 
         let predicates = match table_config.predicates.as_ref() {
             Some(predicates) => {
