@@ -107,6 +107,11 @@ impl DQDeltaStorage {
         }
     }
 
+    pub fn with_store(mut self, store: LogStoreRef) -> Self {
+        self.store = store;
+        self
+    }
+
     fn update_actions(&mut self, actions: &Vec<Action>, version: i64) -> Result<(), DQError> {
         for action in actions {
             if let Action::Add(add) = action {
@@ -307,11 +312,17 @@ impl DQStorageFactory for DQDeltaStorageFactory {
 
 #[cfg(test)]
 mod tests {
+    use crate::commons::tests;
+    use crate::configs::DQTableConfig;
+    use crate::storage::DQStorage;
+    use crate::storages::delta::DQDeltaStorage;
     use deltalake::logstore::default_logstore::DefaultLogStore;
     use deltalake::logstore::{LogStore, LogStoreConfig};
     use deltalake::ObjectStore;
     use object_store::memory::InMemory;
     use object_store::path::Path;
+    use sqlparser::dialect::GenericDialect;
+    use sqlparser::parser::Parser;
     use std::{collections::HashMap, sync::Arc};
     use url::Url;
 
@@ -336,5 +347,53 @@ mod tests {
         assert!(res.is_err());
 
         log_store.write_commit_entry(1, &tmp_path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_check_statistics() {
+        let store = Arc::new(InMemory::new());
+        let url = Url::parse("mem://test0").unwrap();
+        let log_store = DefaultLogStore::new(
+            store.clone(),
+            LogStoreConfig {
+                location: url,
+                options: HashMap::new().into(),
+            },
+        );
+
+        let tmp_path = Path::from("_delta_log/tmp");
+
+        let protocol = tests::create_protocol_action(None, None);
+        let metadata = tests::create_metadata_action(None, None);
+        let commit0 = tests::get_commit_bytes(&vec![protocol, metadata]).unwrap();
+        store.put(&tmp_path, commit0).await.unwrap();
+        log_store.write_commit_entry(0, &tmp_path).await.unwrap();
+
+        let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));
+        let add1 = tests::create_add_action("file1", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":100},\"nullCount\":{\"value\":0}}".into()));
+        let add2 = tests::create_add_action("file2", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":0},\"maxValues\":{\"value\":3},\"nullCount\":{\"value\":0}}".into()));
+        let remove1 = tests::create_remove_action("file1", true);
+        let commit1 = tests::get_commit_bytes(&vec![add0, add1, add2, remove1]).unwrap();
+        store.put(&tmp_path, commit1).await.unwrap();
+        log_store.write_commit_entry(1, &tmp_path).await.unwrap();
+
+        let table_config = DQTableConfig {
+            name: "test0".into(),
+            storage: "delta".into(),
+            compute: "duckdb".into(),
+            filesystem: None,
+            location: "memory://".into(),
+            predicates: None,
+            use_versioning: None,
+        };
+
+        let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
+        storage = storage.with_store(Arc::new(log_store));
+        storage.update().await.unwrap();
+
+        let dialect = GenericDialect {};
+        let statements = Parser::parse_sql(&dialect, "select * from test0").unwrap();
+        let files = storage.execute(statements.first().unwrap()).await.unwrap();
+        assert_eq!(files.len(), 2);
     }
 }
