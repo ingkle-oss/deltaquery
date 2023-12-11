@@ -53,15 +53,13 @@ pub struct DQDeltaStorage {
 impl DQDeltaStorage {
     pub async fn new(
         table_config: &DQTableConfig,
-        _storage_config: Option<&DQStorageConfig>,
+        storage_config: Option<&DQStorageConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
     ) -> Self {
-        let mut filesystem_options = HashMap::<String, String>::new();
-        if let Some(filesystem_config) = filesystem_config {
-            for (k, v) in filesystem_config.configs.iter() {
-                filesystem_options.insert(k.clone(), v.clone());
-            }
-        }
+        let storage_options =
+            storage_config.map_or(HashMap::new(), |config| config.options.clone());
+        let filesystem_options =
+            filesystem_config.map_or(HashMap::new(), |config| config.options.clone());
 
         let location = table_config.location.trim_end_matches("/").to_string();
 
@@ -104,7 +102,9 @@ impl DQDeltaStorage {
             schema: Schema::empty(),
             files: HashMap::new(),
             stats: Vec::new(),
-            max_stats_batches: 32,
+            max_stats_batches: storage_options
+                .get("max_stats_batches")
+                .map_or(32, |v| v.parse().unwrap()),
         }
     }
 

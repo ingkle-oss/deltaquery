@@ -8,7 +8,7 @@ pub struct DQStorageConfig {
     pub r#type: String,
 
     #[serde(default)]
-    pub configs: HashMap<String, String>,
+    pub options: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -17,7 +17,7 @@ pub struct DQComputeConfig {
     pub r#type: String,
 
     #[serde(default)]
-    pub configs: HashMap<String, String>,
+    pub options: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -25,7 +25,7 @@ pub struct DQFilesystemConfig {
     pub name: String,
 
     #[serde(default)]
-    pub configs: HashMap<String, String>,
+    pub options: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow, FieldNamesAsArray)]

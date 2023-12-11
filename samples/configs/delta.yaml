@@ -7,11 +7,11 @@ storages:
 computes:
   - name: "duckdb"
     type: "duckdb"
-    configs:
+    options:
       memory_limit: "-1"
 filesystems:
   - name: "minio"
-    configs:
+    options:
       AWS_ENDPOINT_URL: "http://127.0.0.1:9000"
       AWS_REGION: "ap-northeast-2"
       AWS_ACCESS_KEY_ID: "haruband"

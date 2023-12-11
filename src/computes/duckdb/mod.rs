@@ -19,19 +19,10 @@ impl DQDuckDBCompute {
         compute_config: Option<&DQComputeConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
     ) -> Self {
-        let mut compute_options = HashMap::<String, String>::new();
-        if let Some(compute_config) = compute_config {
-            for (k, v) in compute_config.configs.iter() {
-                compute_options.insert(k.clone(), v.clone());
-            }
-        }
-
-        let mut filesystem_options = HashMap::<String, String>::new();
-        if let Some(filesystem_config) = filesystem_config {
-            for (k, v) in filesystem_config.configs.iter() {
-                filesystem_options.insert(k.clone(), v.clone());
-            }
-        }
+        let compute_options =
+            compute_config.map_or(HashMap::new(), |config| config.options.clone());
+        let filesystem_options =
+            filesystem_config.map_or(HashMap::new(), |config| config.options.clone());
 
         let engine = Connection::open_in_memory().unwrap();
         setup_duckdb(&engine, &compute_options, &filesystem_options).unwrap();
