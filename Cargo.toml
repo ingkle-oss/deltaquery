@@ -43,7 +43,6 @@ local-ip-address = "0.5.6"
 prost = { version = "0.12.1", default-features = false, features = ["prost-derive"] }
 tonic = { version = "0.10.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "gzip"] }
 sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "json"] }
-polars = { version = "0.33.2", features = ["lazy", "json"] }
 duckdb = { git = "https://github.com/haruband/duckdb-rs", branch = "deltaquery", features = ["appender-arrow"] }
 deltalake = { git = "https://github.com/delta-io/delta-rs", features = ["default", "datafusion", "s3"] }
 sqlparser = { version = "0.39", features = ["serde", "visitor"] }
