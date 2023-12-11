@@ -304,3 +304,37 @@ impl DQStorageFactory for DQDeltaStorageFactory {
         Box::new(DQDeltaStorage::new(table_config, storage_config, filesystem_config).await)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use deltalake::logstore::default_logstore::DefaultLogStore;
+    use deltalake::logstore::{LogStore, LogStoreConfig};
+    use deltalake::ObjectStore;
+    use object_store::memory::InMemory;
+    use object_store::path::Path;
+    use std::{collections::HashMap, sync::Arc};
+    use url::Url;
+
+    #[tokio::test]
+    async fn test_try_commit_transaction() {
+        let store = Arc::new(InMemory::new());
+        let url = Url::parse("mem://test0").unwrap();
+        let log_store = DefaultLogStore::new(
+            store.clone(),
+            LogStoreConfig {
+                location: url,
+                options: HashMap::new().into(),
+            },
+        );
+
+        let tmp_path = Path::from("_delta_log/tmp");
+        let version_path = Path::from("_delta_log/00000000000000000000.json");
+        store.put(&tmp_path, bytes::Bytes::new()).await.unwrap();
+        store.put(&version_path, bytes::Bytes::new()).await.unwrap();
+
+        let res = log_store.write_commit_entry(0, &tmp_path).await;
+        assert!(res.is_err());
+
+        log_store.write_commit_entry(1, &tmp_path).await.unwrap();
+    }
+}
