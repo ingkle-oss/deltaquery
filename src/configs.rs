@@ -3,37 +3,33 @@ use std::collections::HashMap;
 use struct_field_names_as_array::FieldNamesAsArray;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DQStorageConfig {
     pub name: String,
     pub r#type: String,
 
     #[serde(default)]
-    pub configs: HashMap<String, String>,
+    pub options: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DQComputeConfig {
     pub name: String,
     pub r#type: String,
 
     #[serde(default)]
-    pub configs: HashMap<String, String>,
+    pub options: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DQFilesystemConfig {
     pub name: String,
 
     #[serde(default)]
-    pub configs: HashMap<String, String>,
+    pub options: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow, FieldNamesAsArray)]
 #[field_names_as_array(visibility = "pub(super)")]
-#[serde(rename_all = "camelCase")]
 pub struct DQTableConfig {
     pub name: String,
     pub storage: String,
@@ -45,7 +41,6 @@ pub struct DQTableConfig {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DQMetastoreConfig {
     pub url: String,
 
@@ -53,7 +48,6 @@ pub struct DQMetastoreConfig {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DQTlsConfig {
     pub server_cert: String,
     pub server_key: String,
@@ -61,7 +55,6 @@ pub struct DQTlsConfig {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DQConfig {
     pub version: i32,
     pub server: String,

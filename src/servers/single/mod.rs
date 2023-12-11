@@ -56,7 +56,6 @@ static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
 });
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct FlightSqlServiceSingleConfig {
     compression: Option<String>,
     endpoint: Option<String>,
