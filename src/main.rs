@@ -33,12 +33,10 @@ pub struct DQOption {
 
 fn handle_state(state: Arc<Mutex<DQState>>) {
     tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(
-            match env::var("DELTAQUERY_UPDATE_INTERVAL") {
-                Ok(value) => value.parse().unwrap(),
-                Err(_) => 60,
-            },
-        ));
+        let mut interval = time::interval(match env::var("DELTAQUERY_UPDATE_INTERVAL") {
+            Ok(value) => duration_str::parse(&value).unwrap(),
+            Err(_) => Duration::from_secs(60),
+        });
 
         loop {
             {

@@ -47,6 +47,7 @@ pub struct DQDeltaStorage {
     files: HashMap<String, DQDeltaFile>,
 
     stats: Vec<RecordBatch>,
+    max_stats_batches: usize,
 }
 
 impl DQDeltaStorage {
@@ -103,6 +104,7 @@ impl DQDeltaStorage {
             schema: Schema::empty(),
             files: HashMap::new(),
             stats: Vec::new(),
+            max_stats_batches: 32,
         }
     }
 
@@ -143,6 +145,13 @@ impl DQDeltaStorage {
             self.predicates.as_ref(),
         )?;
         self.stats.push(batch);
+
+        if self.stats.len() > self.max_stats_batches {
+            self.stats = vec![arrow::compute::concat_batches(
+                &self.stats.first().unwrap().schema(),
+                &self.stats,
+            )?];
+        }
 
         Ok(())
     }
