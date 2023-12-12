@@ -60,7 +60,10 @@ impl DQDeltaStorage {
         let filesystem_options =
             filesystem_config.map_or(HashMap::new(), |config| config.options.clone());
 
-        let location = table_config.location.trim_end_matches("/").to_string();
+        let location = match &table_config.location {
+            Some(location) => location.trim_end_matches("/").to_string(),
+            None => "memory://".into(),
+        };
 
         let url: Url = location.parse().unwrap();
         let location = if url.scheme() == "file" {
@@ -359,10 +362,10 @@ mod tests {
 
         let table_config = DQTableConfig {
             name: "test0".into(),
-            storage: "delta".into(),
-            compute: "duckdb".into(),
+            storage: None,
+            compute: None,
             filesystem: None,
-            location: "memory://".into(),
+            location: None,
             predicates: None,
             use_versioning: None,
         };

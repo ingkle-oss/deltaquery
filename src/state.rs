@@ -40,17 +40,14 @@ impl DQState {
     pub async fn get_table(&mut self, target: &String) -> Option<&mut DQTable> {
         if !self.tables.contains_key(target) {
             if let Some(table_config) = self.config.tables.iter().find(|c| &c.name == target) {
-                let storage_config = self
-                    .config
-                    .storages
-                    .iter()
-                    .find(|c| c.name == table_config.storage);
-
-                let compute_config = self
-                    .config
-                    .computes
-                    .iter()
-                    .find(|c| c.name == table_config.compute);
+                let storage_config = match &table_config.storage {
+                    Some(name) => self.config.storages.iter().find(|c| &c.name == name),
+                    None => None,
+                };
+                let compute_config = match &table_config.compute {
+                    Some(name) => self.config.computes.iter().find(|c| &c.name == name),
+                    None => None,
+                };
 
                 let filesystem_config = if let Some(filesystem) = &table_config.filesystem {
                     self.config
