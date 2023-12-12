@@ -32,10 +32,10 @@ pub struct DQFilesystemConfig {
 #[field_names_as_array(visibility = "pub(super)")]
 pub struct DQTableConfig {
     pub name: String,
-    pub storage: String,
-    pub compute: String,
+    pub storage: Option<String>,
+    pub compute: Option<String>,
     pub filesystem: Option<String>,
-    pub location: String,
+    pub location: Option<String>,
     pub predicates: Option<String>,
     pub use_versioning: Option<bool>,
 }
