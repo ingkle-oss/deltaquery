@@ -67,12 +67,8 @@ async fn main() -> Result<()> {
 
     let endpoint = Endpoint::new(format!("{}://{}:{}", protocol, host, port))
         .unwrap()
-        .connect_timeout(Duration::from_secs(60 * 10))
-        .timeout(Duration::from_secs(60 * 10))
         .tcp_nodelay(true)
         .tcp_keepalive(Option::Some(Duration::from_secs(60 * 60)))
-        .http2_keep_alive_interval(Duration::from_secs(60 * 10))
-        .keep_alive_timeout(Duration::from_secs(60 * 10))
         .keep_alive_while_idle(true);
 
     let channel = endpoint.connect().await.unwrap();
