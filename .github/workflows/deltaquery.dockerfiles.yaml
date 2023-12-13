@@ -1,4 +1,4 @@
-name: Build metabase
+name: Build deltaquery
 on:
   workflow_dispatch:
   push:
