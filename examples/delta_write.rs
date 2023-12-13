@@ -41,7 +41,7 @@ struct DSOption {
     minutes: i32,
 
     #[arg(long, help = "Ranges")]
-    ranges: i32,
+    ranges: i64,
 
     #[arg(long, help = "Records")]
     records: usize,
@@ -55,7 +55,7 @@ async fn main() -> Result<(), deltalake::DeltaTableError> {
 
     let uri = args.get_one::<String>("uri").unwrap();
     let minutes = args.get_one::<i32>("minutes").unwrap();
-    let ranges = args.get_one::<i32>("ranges").unwrap();
+    let ranges = args.get_one::<i64>("ranges").unwrap();
     let records = args.get_one::<usize>("records").unwrap();
 
     let mut storage_options = HashMap::<String, String>::new();
@@ -107,7 +107,7 @@ async fn main() -> Result<(), deltalake::DeltaTableError> {
         let mut scores = Vec::<i32>::new();
 
         for _ in 0..*records {
-            let company = format!("{}{}", "it", (0..*ranges).fake::<i32>());
+            let company = format!("{}{}", "it", (0..*ranges).fake::<i64>());
             let name = Name(EN).fake::<String>();
             let score = (0..).fake::<i32>();
 
