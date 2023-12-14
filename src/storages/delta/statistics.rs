@@ -134,6 +134,10 @@ pub fn get_record_batch_from_actions(
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
 
     for action in actions {
+        if let Action::Remove(remove) = action {
+            println!("============= Remove action: {:#?}", remove);
+        }
+
         if let Action::Add(add) = action {
             let partitions = &add.partition_values;
             let stats = add.get_stats().unwrap();
