@@ -251,14 +251,18 @@ pub fn get_record_batch_from_actions(
         false,
     )));
 
-    let mut arrays = Vec::new();
-    for field in fields.iter() {
-        if let Some(values) = columns.remove(field.name()) {
-            if let Some(array) = ScalarValue::iter_to_array(values).ok() {
-                arrays.push(array);
+    if columns.is_empty() {
+        Ok(RecordBatch::new_empty(Arc::new(Schema::new(fields))))
+    } else {
+        let mut arrays = Vec::new();
+        for field in fields.iter() {
+            if let Some(values) = columns.remove(field.name()) {
+                if let Some(array) = ScalarValue::iter_to_array(values).ok() {
+                    arrays.push(array);
+                }
             }
         }
-    }
 
-    Ok(RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?)
+        Ok(RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?)
+    }
 }
