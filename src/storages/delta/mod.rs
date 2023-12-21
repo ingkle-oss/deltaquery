@@ -371,7 +371,7 @@ mod tests {
         };
 
         let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
-        storage = storage.with_store(Arc::new(log_store));
+        storage = storage.with_store(Arc::new(log_store.clone()));
         storage.update().await.unwrap();
 
         let dialect = GenericDialect {};
@@ -379,6 +379,61 @@ mod tests {
         let statements = Parser::parse_sql(&dialect, "select * from test0").unwrap();
         let files = storage.execute(statements.first().unwrap()).await.unwrap();
         assert_eq!(files.len(), 2);
+
+        let statements =
+            Parser::parse_sql(&dialect, "select * from test0 where value >= 0").unwrap();
+        let files = storage.execute(statements.first().unwrap()).await.unwrap();
+        assert_eq!(files.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_remove_action_stats() {
+        let store = Arc::new(InMemory::new());
+        let log_store = DefaultLogStore::new(
+            store.clone(),
+            LogStoreConfig {
+                location: Url::parse("mem://test0").unwrap(),
+                options: HashMap::new().into(),
+            },
+        );
+
+        let tmp_path = Path::from("_delta_log/tmp");
+
+        let protocol = tests::create_protocol_action(None, None);
+        let metadata = tests::create_metadata_action(None, None);
+        let commit0 = tests::get_commit_bytes(&vec![protocol, metadata]).unwrap();
+        store.put(&tmp_path, commit0).await.unwrap();
+        log_store.write_commit_entry(0, &tmp_path).await.unwrap();
+
+        let table_config = DQTableConfig {
+            name: "test0".into(),
+            storage: None,
+            compute: None,
+            filesystem: None,
+            location: None,
+            predicates: None,
+            use_versioning: None,
+        };
+        let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
+        storage = storage.with_store(Arc::new(log_store.clone()));
+
+        let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));
+        let add1 = tests::create_add_action("file1", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":100},\"nullCount\":{\"value\":0}}".into()));
+        let add2 = tests::create_add_action("file2", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":0},\"maxValues\":{\"value\":3},\"nullCount\":{\"value\":0}}".into()));
+        let commit1 = tests::get_commit_bytes(&vec![add0, add1, add2]).unwrap();
+        store.put(&tmp_path, commit1).await.unwrap();
+        log_store.write_commit_entry(1, &tmp_path).await.unwrap();
+
+        storage.update().await.unwrap();
+
+        let remove1 = tests::create_remove_action("file1", true);
+        let commit2 = tests::get_commit_bytes(&vec![remove1]).unwrap();
+        store.put(&tmp_path, commit2).await.unwrap();
+        log_store.write_commit_entry(2, &tmp_path).await.unwrap();
+
+        storage.update().await.unwrap();
+
+        let dialect = GenericDialect {};
 
         let statements =
             Parser::parse_sql(&dialect, "select * from test0 where value >= 0").unwrap();
