@@ -51,6 +51,22 @@ pub fn get_projection(statement: &Statement) -> Vec<String> {
                             Expr::Identifier(ident) => {
                                 projection.push(ident.value.clone());
                             }
+                            Expr::Function(func) => {
+                                for arg in &func.args {
+                                    match arg {
+                                        FunctionArg::Unnamed(expr) => match expr {
+                                            FunctionArgExpr::Expr(expr) => match expr {
+                                                Expr::Identifier(ident) => {
+                                                    projection.push(ident.value.clone());
+                                                }
+                                                _ => unimplemented!(),
+                                            },
+                                            _ => unimplemented!(),
+                                        },
+                                        _ => unimplemented!(),
+                                    }
+                                }
+                            }
                             _ => unimplemented!(),
                         },
                         _ => unimplemented!(),
