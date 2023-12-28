@@ -291,6 +291,10 @@ impl DQStorage for DQDeltaStorage {
 
         Ok(files)
     }
+
+    fn schema(&self) -> Option<Schema> {
+        Some(self.schema.clone())
+    }
 }
 
 pub struct DQDeltaStorageFactory {}

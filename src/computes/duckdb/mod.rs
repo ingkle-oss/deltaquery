@@ -2,6 +2,7 @@ use crate::compute::{DQCompute, DQComputeFactory};
 use crate::configs::{DQComputeConfig, DQFilesystemConfig};
 use crate::error::DQError;
 use arrow::array::RecordBatch;
+use arrow::datatypes::Schema;
 use async_trait::async_trait;
 use duckdb::{params, Connection};
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
@@ -38,6 +39,7 @@ impl DQCompute for DQDuckDBCompute {
     async fn execute(
         &mut self,
         statement: &Statement,
+        _schema: Option<Schema>,
         files: Vec<String>,
     ) -> Result<Vec<RecordBatch>, DQError> {
         let mut batches = Vec::new();
