@@ -1,5 +1,6 @@
 use crate::configs::{DQFilesystemConfig, DQStorageConfig, DQTableConfig};
 use crate::error::DQError;
+use arrow::datatypes::Schema;
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use sqlparser::ast::Statement;
@@ -13,6 +14,8 @@ static STORAGE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQStorageFactory>>>
 pub trait DQStorage: Send + Sync {
     async fn update(&mut self) -> Result<(), DQError>;
     async fn execute(&mut self, statement: &Statement) -> Result<Vec<String>, DQError>;
+
+    fn schema(&self) -> Option<Schema>;
 }
 
 #[async_trait]

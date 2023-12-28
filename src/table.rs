@@ -22,7 +22,8 @@ impl DQTable {
 
     pub async fn execute(&mut self, statement: &Statement) -> Result<Vec<RecordBatch>, DQError> {
         let files = self.storage.execute(statement).await?;
-        let batches = self.compute.execute(statement, files).await?;
+        let schema = self.storage.schema();
+        let batches = self.compute.execute(statement, schema, files).await?;
 
         Ok(batches)
     }
