@@ -1,7 +1,7 @@
 use crate::configs::{DQComputeConfig, DQFilesystemConfig};
 use crate::error::DQError;
 use arrow::array::RecordBatch;
-use arrow::datatypes::Schema;
+use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use sqlparser::ast::Statement;
@@ -16,7 +16,7 @@ pub trait DQCompute: Send + Sync {
     async fn execute(
         &mut self,
         statement: &Statement,
-        schema: Option<Schema>,
+        schema: Option<SchemaRef>,
         files: Vec<String>,
     ) -> Result<Vec<RecordBatch>, DQError>;
 }

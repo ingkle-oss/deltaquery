@@ -1,7 +1,7 @@
 use crate::error::DQError;
 use arrow::array::RecordBatch;
 use arrow::compute::{cast_with_options, CastOptions};
-use arrow::datatypes::{DataType, Field, FieldRef, Schema, TimeUnit};
+use arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit};
 use deltalake::datafusion::common::scalar::ScalarValue;
 use deltalake::datafusion::common::DataFusionError;
 use deltalake::kernel::Action;
@@ -120,7 +120,7 @@ fn get_scalar_value(
 
 pub fn get_record_batch_from_actions(
     actions: &Vec<Action>,
-    schema: &Schema,
+    schema: &SchemaRef,
     predicates: Option<&Vec<String>>,
 ) -> Result<RecordBatch, DQError> {
     let fields = match predicates {
