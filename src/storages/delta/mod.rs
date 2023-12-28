@@ -4,7 +4,7 @@ use crate::error::DQError;
 use crate::storage::{DQStorage, DQStorageFactory};
 use arrow::array::cast::AsArray;
 use arrow::array::RecordBatch;
-use arrow::datatypes::Schema;
+use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
 use deltalake::datafusion::common::cast::as_string_array;
 use deltalake::datafusion::common::ToDFSchema;
@@ -16,6 +16,7 @@ use deltalake::storage::config::configure_log_store;
 use deltalake::ObjectStoreError;
 use sqlparser::ast::{SetExpr, Statement};
 use std::collections::HashMap;
+use std::sync::Arc;
 use url::Url;
 
 mod predicates;
@@ -37,7 +38,7 @@ pub struct DQDeltaStorage {
     predicates: Option<Vec<String>>,
 
     version: i64,
-    schema: Schema,
+    schema: SchemaRef,
 
     use_versioning: bool,
 
@@ -101,7 +102,7 @@ impl DQDeltaStorage {
             use_versioning: table_config.use_versioning.unwrap_or(false),
             protocol: Protocol::default(),
             metadata: Metadata::default(),
-            schema: Schema::empty(),
+            schema: Arc::new(Schema::empty()),
             files: HashMap::new(),
             stats: Vec::new(),
             max_stats_batches: storage_options
@@ -138,7 +139,7 @@ impl DQDeltaStorage {
                 self.protocol = protocol.clone();
             } else if let Action::Metadata(metadata) = action {
                 self.metadata = metadata.clone();
-                self.schema = Schema::try_from(&metadata.schema().unwrap()).unwrap();
+                self.schema = Arc::new(Schema::try_from(&metadata.schema().unwrap()).unwrap());
             }
         }
 
@@ -292,7 +293,7 @@ impl DQStorage for DQDeltaStorage {
         Ok(files)
     }
 
-    fn schema(&self) -> Option<Schema> {
+    fn schema(&self) -> Option<SchemaRef> {
         Some(self.schema.clone())
     }
 }
