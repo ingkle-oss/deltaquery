@@ -68,6 +68,7 @@ impl DQState {
                 {
                     if let Some(compute) = create_compute_using_factory(
                         compute_config.map_or("duckdb", |config| &config.r#type),
+                        table_config,
                         compute_config,
                         filesystem_config,
                     )
