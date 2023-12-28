@@ -1,4 +1,4 @@
-use crate::configs::{DQComputeConfig, DQFilesystemConfig};
+use crate::configs::{DQComputeConfig, DQFilesystemConfig, DQTableConfig};
 use crate::error::DQError;
 use arrow::array::RecordBatch;
 use arrow::datatypes::SchemaRef;
@@ -25,6 +25,7 @@ pub trait DQCompute: Send + Sync {
 pub trait DQComputeFactory: Send + Sync {
     async fn create(
         &self,
+        table_config: &DQTableConfig,
         compute_config: Option<&DQComputeConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
     ) -> Box<dyn DQCompute>;
@@ -37,12 +38,15 @@ pub async fn register_compute_factory(name: &str, factory: Box<dyn DQComputeFact
 
 pub async fn create_compute_using_factory(
     name: &str,
+    table_config: &DQTableConfig,
     compute_config: Option<&DQComputeConfig>,
     filesystem_config: Option<&DQFilesystemConfig>,
 ) -> Option<Box<dyn DQCompute>> {
     let factories = COMPUTE_FACTORIES.lock().await;
     if let Some(factory) = factories.get(name) {
-        let compute: Box<dyn DQCompute> = factory.create(compute_config, filesystem_config).await;
+        let compute: Box<dyn DQCompute> = factory
+            .create(table_config, compute_config, filesystem_config)
+            .await;
         Some(compute)
     } else {
         None

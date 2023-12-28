@@ -1,5 +1,5 @@
 use crate::compute::{DQCompute, DQComputeFactory};
-use crate::configs::{DQComputeConfig, DQFilesystemConfig};
+use crate::configs::{DQComputeConfig, DQFilesystemConfig, DQTableConfig};
 use crate::error::DQError;
 use arrow::array::RecordBatch;
 use arrow::datatypes::SchemaRef;
@@ -17,6 +17,7 @@ pub struct DQDuckDBCompute {
 
 impl DQDuckDBCompute {
     pub async fn new(
+        _table_config: &DQTableConfig,
         compute_config: Option<&DQComputeConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
     ) -> Self {
@@ -104,10 +105,11 @@ impl DQDuckDBComputeFactory {
 impl DQComputeFactory for DQDuckDBComputeFactory {
     async fn create(
         &self,
+        table_config: &DQTableConfig,
         compute_config: Option<&DQComputeConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
     ) -> Box<dyn DQCompute> {
-        Box::new(DQDuckDBCompute::new(compute_config, filesystem_config).await)
+        Box::new(DQDuckDBCompute::new(table_config, compute_config, filesystem_config).await)
     }
 }
 
