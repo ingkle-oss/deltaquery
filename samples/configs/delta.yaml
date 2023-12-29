@@ -35,6 +35,6 @@ tables:
   - name: "delta.default.local"
     storage: "delta"
     compute: "duckdb"
-    location: "file:///Users/haruband/Documents/deltaquery/samples/samples/delta/"
+    location: "/Users/haruband/Documents/deltaquery/samples/samples/delta/"
     predicates: "date,hour"
     use_versioning: false

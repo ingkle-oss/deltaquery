@@ -66,11 +66,12 @@ impl DQDeltaStorage {
             None => "memory://".into(),
         };
 
-        let url: Url = location.parse().unwrap();
-        let location = if url.scheme() == "file" {
-            url.path().to_string()
-        } else {
-            location
+        let url = match Url::parse(&location) {
+            Ok(url) => url,
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                Url::from_file_path(&location).expect("could not parse table location")
+            }
+            Err(_) => panic!("could not parse table location"),
         };
         let store = configure_log_store(url.as_str(), filesystem_options, None).unwrap();
 
