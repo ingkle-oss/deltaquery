@@ -167,14 +167,15 @@ fn setup_duckdb(
         if let Some(s3_endpoint) = filesystem_options.get("AWS_ENDPOINT_URL") {
             let url: Url = s3_endpoint.parse().unwrap();
 
-            engine.execute(
-                &format!(
-                    "SET s3_endpoint='{}:{}'",
-                    url.host_str().unwrap(),
-                    url.port().unwrap()
-                ),
-                params![],
-            )?;
+            match (url.host_str(), url.port()) {
+                (Some(host), Some(port)) => {
+                    engine.execute(&format!("SET s3_endpoint='{}:{}'", host, port), params![])?;
+                }
+                (Some(host), None) => {
+                    engine.execute(&format!("SET s3_endpoint='{}'", host), params![])?;
+                }
+                _ => unimplemented!(),
+            }
         }
         if let Some(s3_region) = filesystem_options.get("AWS_REGION") {
             engine.execute(&format!("SET s3_region='{}'", s3_region), params![])?;
