@@ -47,6 +47,8 @@ macro_rules! status {
     };
 }
 
+static BASIC_AUTHORIZATION_PREFIX: &str = "Basic ";
+
 static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
     let mut builder = SqlInfoDataBuilder::new();
     builder.append(SqlInfo::FlightSqlServerName, "Single Flight SQL Server");
@@ -133,17 +135,20 @@ impl FlightSqlServiceSingle {
     }
 
     fn check_token<T>(&self, request: &Request<T>) -> Result<(), DQError> {
-        let basic = "Basic ";
-        let authorization = request.metadata().get("authorization").unwrap().to_str()?;
-        if !authorization.starts_with(basic) {}
-        let payload = BASE64_STANDARD.decode(&authorization[basic.len()..])?;
-        let payload = String::from_utf8(payload)?;
-        let tokens: Vec<_> = payload.split(':').collect();
-        #[allow(unused_variables)]
-        let (username, password) = match tokens.as_slice() {
-            [username, password] => (username, password),
-            _ => (&"none", &"none"),
-        };
+        if let Some(authorization) = request.metadata().get("authorization") {
+            let authorization = authorization.to_str()?;
+            if authorization.starts_with(BASIC_AUTHORIZATION_PREFIX) {
+                let payload =
+                    BASE64_STANDARD.decode(&authorization[BASIC_AUTHORIZATION_PREFIX.len()..])?;
+                let payload = String::from_utf8(payload)?;
+                let tokens: Vec<_> = payload.split(':').collect();
+                #[allow(unused_variables)]
+                let (username, password) = match tokens.as_slice() {
+                    [username, password] => (username, password),
+                    _ => (&"none", &"none"),
+                };
+            }
+        }
 
         Ok(())
     }
@@ -170,20 +175,19 @@ impl FlightSqlService for FlightSqlServiceSingle {
         log::info!("do_handshake");
         log::info!("request={:#?}", request);
 
-        let basic = "Basic ";
         let authorization = request
             .metadata()
             .get("authorization")
             .ok_or_else(|| Status::invalid_argument("Authorization field not present"))?
             .to_str()
             .map_err(|e| status!("Authorization not parsable", e))?;
-        if !authorization.starts_with(basic) {
+        if !authorization.starts_with(BASIC_AUTHORIZATION_PREFIX) {
             Err(Status::invalid_argument(format!(
                 "Auth type not implemented: {authorization}"
             )))?;
         }
         let payload = BASE64_STANDARD
-            .decode(&authorization[basic.len()..])
+            .decode(&authorization[BASIC_AUTHORIZATION_PREFIX.len()..])
             .map_err(|e| status!("Authorization not decodable", e))?;
         let payload =
             String::from_utf8(payload).map_err(|e| status!("Authorization not parsable", e))?;
