@@ -11,8 +11,9 @@ use deltalake::datafusion::common::ToDFSchema;
 use deltalake::datafusion::physical_expr::create_physical_expr;
 use deltalake::datafusion::physical_expr::execution_props::ExecutionProps;
 use deltalake::kernel::{Action, Add, Metadata, Protocol};
+use deltalake::logstore::logstore_for;
 use deltalake::logstore::LogStoreRef;
-use deltalake::storage::config::configure_log_store;
+use deltalake::table::builder::ensure_table_uri;
 use deltalake::ObjectStoreError;
 use sqlparser::ast::{SetExpr, Statement};
 use std::collections::HashMap;
@@ -73,7 +74,11 @@ impl DQDeltaStorage {
             }
             Err(_) => panic!("could not parse table location"),
         };
-        let store = configure_log_store(url.as_str(), filesystem_options, None).unwrap();
+        let store = logstore_for(
+            ensure_table_uri(url.as_str()).expect("could not parse table location"),
+            filesystem_options,
+        )
+        .expect("could not get object store for table");
 
         let predicates = match table_config.predicates.as_ref() {
             Some(predicates) => {
