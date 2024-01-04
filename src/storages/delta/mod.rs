@@ -308,6 +308,8 @@ pub struct DQDeltaStorageFactory {}
 
 impl DQDeltaStorageFactory {
     pub fn new() -> Self {
+        deltalake::aws::register_handlers(None);
+
         DQDeltaStorageFactory {}
     }
 }
