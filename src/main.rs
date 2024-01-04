@@ -89,6 +89,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => serde_yaml::Value::default(),
     };
 
+    deltalake::aws::register_handlers(None);
+
     register_storage_factory("delta", Box::new(DQDeltaStorageFactory::new())).await;
     register_compute_factory("duckdb", Box::new(DQDuckDBComputeFactory::new())).await;
 
