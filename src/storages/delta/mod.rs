@@ -330,8 +330,7 @@ mod tests {
     use crate::configs::DQTableConfig;
     use crate::storage::DQStorage;
     use crate::storages::delta::DQDeltaStorage;
-    use deltalake::logstore::default_logstore::DefaultLogStore;
-    use deltalake::logstore::{LogStore, LogStoreConfig};
+    use deltalake::logstore::default_logstore;
     use deltalake::ObjectStore;
     use object_store::memory::InMemory;
     use object_store::path::Path;
@@ -343,12 +342,10 @@ mod tests {
     #[tokio::test]
     async fn test_predicates_pushdown() {
         let store = Arc::new(InMemory::new());
-        let log_store = DefaultLogStore::new(
+        let log_store = default_logstore(
             store.clone(),
-            LogStoreConfig {
-                location: Url::parse("mem://test0").unwrap(),
-                options: HashMap::new().into(),
-            },
+            &Url::parse("mem://test0").unwrap(),
+            &HashMap::new().into(),
         );
 
         let tmp_path = Path::from("_delta_log/tmp");
@@ -382,7 +379,7 @@ mod tests {
         };
 
         let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
-        storage = storage.with_store(Arc::new(log_store.clone()));
+        storage = storage.with_store(log_store.clone());
         storage.update().await.unwrap();
 
         let dialect = GenericDialect {};
@@ -400,12 +397,10 @@ mod tests {
     #[tokio::test]
     async fn test_remove_action_stats() {
         let store = Arc::new(InMemory::new());
-        let log_store = DefaultLogStore::new(
+        let log_store = default_logstore(
             store.clone(),
-            LogStoreConfig {
-                location: Url::parse("mem://test0").unwrap(),
-                options: HashMap::new().into(),
-            },
+            &Url::parse("mem://test0").unwrap(),
+            &HashMap::new().into(),
         );
 
         let tmp_path = Path::from("_delta_log/tmp");
@@ -426,7 +421,7 @@ mod tests {
             use_versioning: None,
         };
         let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
-        storage = storage.with_store(Arc::new(log_store.clone()));
+        storage = storage.with_store(log_store.clone());
 
         let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));
         let add1 = tests::create_add_action("file1", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":100},\"nullCount\":{\"value\":0}}".into()));
