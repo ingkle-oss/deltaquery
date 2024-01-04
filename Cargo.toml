@@ -47,7 +47,7 @@ sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "jso
 duckdb = { git = "https://github.com/duckdb/duckdb-rs", features = ["appender-arrow"] }
 sqlparser = { version = "0.39", features = ["serde", "visitor"] }
 deltalake = { git = "https://github.com/delta-io/delta-rs", features = ["default", "datafusion", "s3"] }
-object_store = { version = "0.7" }
+object_store = { version = "0.8" }
 
 [dev-dependencies]
 fake = "2.6"
