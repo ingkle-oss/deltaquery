@@ -26,12 +26,12 @@ serde_json = "1"
 chrono = "0"
 chrono-tz = "0.8.3"
 duration-str = "0.7.0"
-arrow = { version = "48", features = ["prettyprint", "ffi"] }
-arrow-cast = { version = "48", features = ["prettyprint"] }
-arrow-schema = { version = "48" }
-arrow-select = { version = "48" }
-arrow-ipc = { version = "48", features = ["zstd"] }
-arrow-flight = { version = "48", features = ["flight-sql-experimental"] }
+arrow = { version = "49", features = ["prettyprint", "ffi"] }
+arrow-cast = { version = "49", features = ["prettyprint"] }
+arrow-schema = { version = "49" }
+arrow-select = { version = "49" }
+arrow-ipc = { version = "49", features = ["zstd"] }
+arrow-flight = { version = "49", features = ["flight-sql-experimental"] }
 base64 = { version = "0.21", default-features = false, features = ["std"] }
 bytes = { version = "1", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
@@ -44,7 +44,7 @@ local-ip-address = "0.5.6"
 prost = { version = "0.12.1", default-features = false, features = ["prost-derive"] }
 tonic = { version = "0.10.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "gzip"] }
 sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "json"] }
-duckdb = { git = "https://github.com/haruband/duckdb-rs", branch = "deltaquery", features = ["appender-arrow"] }
+duckdb = { git = "https://github.com/duckdb/duckdb-rs", features = ["appender-arrow"] }
 sqlparser = { version = "0.39", features = ["serde", "visitor"] }
 deltalake = { git = "https://github.com/delta-io/delta-rs", features = ["default", "datafusion", "s3"] }
 object_store = { version = "0.7" }
