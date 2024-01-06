@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub const STATS_TABLE_ADD_PATH: &str = "__path__";
+pub const STATS_FIELD_SUFFIX_MAX: &str = "max";
 
 fn get_scalar_value_for_null(datatype: &DataType) -> Result<ScalarValue, DeltaTableError> {
     match datatype {
@@ -196,7 +197,7 @@ pub fn get_record_batch_from_actions(
                         }
                     }
                     if stats.max_values.contains_key(field.name()) {
-                        let name = [field.name(), "max"].join(".");
+                        let name = [field.name(), STATS_FIELD_SUFFIX_MAX].join(".");
                         let value = stats
                             .max_values
                             .get(field.name())
@@ -238,6 +239,28 @@ pub fn get_record_batch_from_actions(
                     columns.insert(STATS_TABLE_ADD_PATH.to_string(), values);
                 }
             }
+        }
+        if let Action::Remove(remove) = action {
+            let paths = columns.get_mut(STATS_TABLE_ADD_PATH).unwrap();
+            match paths.iter().position(|path| path.to_string() == remove.path) {
+                Some(idx) => {
+                    paths.swap_remove(idx);
+                    for field in &fields {
+                        let values = columns.get_mut(field.name()).unwrap();
+                        values.swap_remove(idx);
+
+                        let name = [field.name(), STATS_FIELD_SUFFIX_MAX].join(".");
+                        if columns.contains_key(&name) {
+                            let values = columns.get_mut(&name).unwrap();
+                            values.swap_remove(idx);
+                        }
+                    }
+                },
+                None => {
+                    // TODO:
+                    // The removing target is not found
+                },
+            };
         }
     }
 
