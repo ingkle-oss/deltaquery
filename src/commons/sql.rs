@@ -67,6 +67,9 @@ pub fn get_projection(statement: &Statement) -> Vec<String> {
                                     }
                                 }
                             }
+                            Expr::Value(value) => {
+                                projection.push(value.to_string());
+                            }
                             _ => unimplemented!(),
                         },
                         _ => unimplemented!(),
