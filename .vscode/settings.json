@@ -1,5 +1,6 @@
 {
   "prettier.printWidth": 100,
   "prettier.tabWidth": 2,
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "rust-analyzer.showUnlinkedFileNotification": false
 }
