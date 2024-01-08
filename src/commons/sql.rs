@@ -27,13 +27,13 @@ pub fn get_table(statement: &Statement) -> Option<String> {
 
                             return Some(target.join("."));
                         }
-                        _ => unimplemented!(),
+                        _ => {}
                     }
                 }
             }
-            _ => unimplemented!(),
+            _ => {}
         },
-        _ => unimplemented!(),
+        _ => {}
     }
 
     None
