@@ -1,13 +1,11 @@
 use crate::commons::flight;
+use crate::commons::sql;
 use crate::error::DQError;
-use crate::servers::FetchResults;
+use crate::servers::flightsql::helpers::FetchResults;
 use crate::state::DQState;
-use arrow::array::builder::StringBuilder;
-use arrow::array::{ArrayRef, RecordBatch};
+use arrow::array::RecordBatch;
 use arrow_flight::encode::FlightDataEncoderBuilder;
-use arrow_flight::sql::metadata::{
-    SqlInfoData, SqlInfoDataBuilder, XdbcTypeInfo, XdbcTypeInfoData, XdbcTypeInfoDataBuilder,
-};
+use arrow_flight::sql::metadata::{SqlInfoData, SqlInfoDataBuilder};
 use arrow_flight::sql::server::PeekableFlightDataStream;
 use arrow_flight::sql::{
     server::FlightSqlService, ActionBeginSavepointRequest, ActionBeginSavepointResult,
@@ -19,26 +17,29 @@ use arrow_flight::sql::{
     CommandGetDbSchemas, CommandGetExportedKeys, CommandGetImportedKeys, CommandGetPrimaryKeys,
     CommandGetSqlInfo, CommandGetTableTypes, CommandGetTables, CommandGetXdbcTypeInfo,
     CommandPreparedStatementQuery, CommandPreparedStatementUpdate, CommandStatementQuery,
-    CommandStatementSubstraitPlan, CommandStatementUpdate, Nullable, ProstMessageExt, Searchable,
-    SqlInfo, TicketStatementQuery, XdbcDataType,
+    CommandStatementSubstraitPlan, CommandStatementUpdate, ProstMessageExt, SqlInfo,
+    TicketStatementQuery,
 };
 use arrow_flight::{
     flight_service_server::FlightService, Action, FlightData, FlightDescriptor, FlightEndpoint,
-    FlightInfo, HandshakeRequest, HandshakeResponse, IpcMessage, Location, SchemaAsIpc, Ticket,
+    FlightInfo, HandshakeRequest, HandshakeResponse, Location, Ticket,
 };
-use arrow_ipc::writer::IpcWriteOptions;
 use arrow_ipc::CompressionType;
-use arrow_schema::{DataType, Field, Schema};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use futures::{stream, Stream, TryStreamExt};
 use once_cell::sync::Lazy;
 use prost::Message;
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use sqlparser::ast::Statement;
+use sqlparser::dialect::GenericDialect;
+use sqlparser::parser::Parser;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, Streaming};
+use uuid::Uuid;
 
 macro_rules! status {
     ($desc:expr, $err:expr) => {
@@ -46,83 +47,123 @@ macro_rules! status {
     };
 }
 
-const SIMPLE_TOKEN: &str = "simple_token";
-const SIMPLE_HANDLE: &str = "simple_handle";
-const SIMPLE_UPDATE_RESULT: i64 = 1;
+static BASIC_AUTHORIZATION_PREFIX: &str = "Basic ";
 
-static SIMPLE_SQL_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
+static SQL_INFO_DATA: Lazy<SqlInfoData> = Lazy::new(|| {
     let mut builder = SqlInfoDataBuilder::new();
-    builder.append(SqlInfo::FlightSqlServerName, "Simple Flight SQL Server");
+    builder.append(SqlInfo::FlightSqlServerName, "Single Flight SQL Server");
     builder.append(SqlInfo::FlightSqlServerVersion, "1");
     builder.append(SqlInfo::FlightSqlServerArrowVersion, "1.3");
     builder.build().unwrap()
 });
 
-static SIMPLE_XBDC_DATA: Lazy<XdbcTypeInfoData> = Lazy::new(|| {
-    let mut builder = XdbcTypeInfoDataBuilder::new();
-    builder.append(XdbcTypeInfo {
-        type_name: "INTEGER".into(),
-        data_type: XdbcDataType::XdbcInteger,
-        column_size: Some(32),
-        literal_prefix: None,
-        literal_suffix: None,
-        create_params: None,
-        nullable: Nullable::NullabilityNullable,
-        case_sensitive: false,
-        searchable: Searchable::Full,
-        unsigned_attribute: Some(false),
-        fixed_prec_scale: false,
-        auto_increment: Some(false),
-        local_type_name: Some("INTEGER".into()),
-        minimum_scale: None,
-        maximum_scale: None,
-        sql_data_type: XdbcDataType::XdbcInteger,
-        datetime_subcode: None,
-        num_prec_radix: Some(2),
-        interval_precision: None,
-    });
-    builder.build().unwrap()
-});
-
-static SIMPLE_TABLES: Lazy<Vec<&'static str>> = Lazy::new(|| vec!["deltaquery.simple.test0"]);
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FlightSqlServiceSingleConfig {
+    compression: Option<String>,
+    endpoint: Option<String>,
+    port: Option<u16>,
+}
 
 #[derive(Clone)]
-pub struct FlightSqlServiceSimple {}
+pub struct FlightSqlServiceSingle {
+    state: Arc<Mutex<DQState>>,
 
-impl FlightSqlServiceSimple {
-    pub async fn new(_state: Arc<Mutex<DQState>>, _catalog: serde_yaml::Value) -> Self {
-        FlightSqlServiceSimple {}
+    compression: Option<CompressionType>,
+    endpoint: String,
+
+    handles: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
+}
+
+impl FlightSqlServiceSingle {
+    pub async fn new(state: Arc<Mutex<DQState>>, catalog: serde_yaml::Value) -> Self {
+        let config: FlightSqlServiceSingleConfig = serde_yaml::from_value(catalog).unwrap();
+
+        let compression = match config.compression.as_deref() {
+            Some("zstd") => Some(CompressionType::ZSTD),
+            Some(&_) => None,
+            None => None,
+        };
+        let endpoint = match config.endpoint {
+            Some(endpoint) => endpoint.clone(),
+            None => local_ip_address::local_ip()
+                .expect("could not fetch local ip address")
+                .to_string(),
+        };
+        let port = match config.port {
+            Some(port) => port,
+            None => 32010,
+        };
+
+        FlightSqlServiceSingle {
+            state,
+            compression,
+            endpoint: format!("grpc://{}:{}", endpoint, port),
+            handles: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn build_flight_info(
+        &self,
+        items: &Vec<RecordBatch>,
+        handle: String,
+        location: String,
+    ) -> Result<Option<FlightInfo>, DQError> {
+        if let Some(item0) = items.first() {
+            let schema = (*item0.schema()).clone();
+            let num_rows: usize = items.iter().map(|b| b.num_rows()).sum();
+            let num_bytes: usize = items.iter().map(|b| b.get_array_memory_size()).sum();
+
+            let location = Location { uri: location };
+            let fetch = FetchResults { handle: handle };
+            let ticket = Ticket::new(fetch.as_any().encode_to_vec());
+            let endpoint = FlightEndpoint {
+                ticket: Some(ticket),
+                location: vec![location],
+            };
+            let flight_info = FlightInfo::new()
+                .try_with_schema(&schema)?
+                .with_descriptor(FlightDescriptor::new_cmd(vec![]))
+                .with_endpoint(endpoint)
+                .with_total_records(num_rows as i64)
+                .with_total_bytes(num_bytes as i64)
+                .with_ordered(false);
+
+            Ok(Some(flight_info))
+        } else {
+            Ok(None)
+        }
     }
 
     fn check_token<T>(&self, request: &Request<T>) -> Result<(), DQError> {
-        let basic = "Basic ";
-        let authorization = request.metadata().get("authorization").unwrap().to_str()?;
-        if !authorization.starts_with(basic) {}
-        let payload = BASE64_STANDARD.decode(&authorization[basic.len()..])?;
-        let payload = String::from_utf8(payload)?;
-        let tokens: Vec<_> = payload.split(':').collect();
-        #[allow(unused_variables)]
-        let (username, password) = match tokens.as_slice() {
-            [username, password] => (username, password),
-            _ => (&"none", &"none"),
-        };
+        if let Some(authorization) = request.metadata().get("authorization") {
+            let authorization = authorization.to_str()?;
+            if authorization.starts_with(BASIC_AUTHORIZATION_PREFIX) {
+                let payload =
+                    BASE64_STANDARD.decode(&authorization[BASIC_AUTHORIZATION_PREFIX.len()..])?;
+                let payload = String::from_utf8(payload)?;
+                let tokens: Vec<_> = payload.split(':').collect();
+                #[allow(unused_variables)]
+                let (username, password) = match tokens.as_slice() {
+                    [username, password] => (username, password),
+                    _ => (&"none", &"none"),
+                };
+            }
+        }
 
         Ok(())
     }
 
-    fn get_dummy_batch() -> Result<RecordBatch, DQError> {
-        let schema = Schema::new(vec![Field::new("salutation", DataType::Utf8, false)]);
-        let mut builder = StringBuilder::new();
-        builder.append_value("Hello, FlightSQL!");
-        let cols = vec![Arc::new(builder.finish()) as ArrayRef];
-        let batches = RecordBatch::try_new(Arc::new(schema), cols)?;
-        Ok(batches)
+    fn parse_sql(&self, sql: &String) -> Result<Vec<Statement>, DQError> {
+        let dialect = GenericDialect {};
+        let statements = Parser::parse_sql(&dialect, sql)?;
+
+        Ok(statements)
     }
 }
 
 #[tonic::async_trait]
-impl FlightSqlService for FlightSqlServiceSimple {
-    type FlightService = FlightSqlServiceSimple;
+impl FlightSqlService for FlightSqlServiceSingle {
+    type FlightService = FlightSqlServiceSingle;
 
     async fn do_handshake(
         &self,
@@ -132,21 +173,21 @@ impl FlightSqlService for FlightSqlServiceSimple {
         Status,
     > {
         log::info!("do_handshake");
+        log::info!("request={:#?}", request);
 
-        let basic = "Basic ";
         let authorization = request
             .metadata()
             .get("authorization")
             .ok_or_else(|| Status::invalid_argument("Authorization field not present"))?
             .to_str()
             .map_err(|e| status!("Authorization not parsable", e))?;
-        if !authorization.starts_with(basic) {
+        if !authorization.starts_with(BASIC_AUTHORIZATION_PREFIX) {
             Err(Status::invalid_argument(format!(
                 "Auth type not implemented: {authorization}"
             )))?;
         }
         let payload = BASE64_STANDARD
-            .decode(&authorization[basic.len()..])
+            .decode(&authorization[BASIC_AUTHORIZATION_PREFIX.len()..])
             .map_err(|e| status!("Authorization not decodable", e))?;
         let payload =
             String::from_utf8(payload).map_err(|e| status!("Authorization not parsable", e))?;
@@ -161,14 +202,16 @@ impl FlightSqlService for FlightSqlServiceSimple {
 
         let result = HandshakeResponse {
             protocol_version: 0,
-            payload: SIMPLE_TOKEN.into(),
+            payload: "".into(),
         };
         let result = Ok(result);
 
         let stream: Pin<Box<dyn Stream<Item = Result<HandshakeResponse, Status>> + Send>> =
             Box::pin(stream::iter(vec![result]));
 
-        let res = Response::new(stream);
+        let mut res = Response::new(stream);
+        res.metadata_mut()
+            .insert("authorization", authorization.parse().unwrap());
         log::info!("response={:#?}", res.metadata());
         Ok(res)
     }
@@ -183,35 +226,38 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("request={:#?}", request);
 
         self.check_token(&request)?;
-        let batch = Self::get_dummy_batch()?;
-        let schema = (*batch.schema()).clone();
-        let num_rows = batch.num_rows();
-        let num_bytes = batch.get_array_memory_size();
-        let loc = Location {
-            uri: "grpc://127.0.0.1:32010".to_string(),
-        };
-        let fetch = FetchResults {
-            handle: SIMPLE_HANDLE.to_string(),
-        };
-        let ticket = Ticket {
-            ticket: fetch.as_any().encode_to_vec().into(),
-        };
-        let endpoint = FlightEndpoint {
-            ticket: Some(ticket),
-            location: vec![loc],
-        };
-        let flight_info = FlightInfo::new()
-            .try_with_schema(&schema)
-            .map_err(|e| status!("Unable to serialize schema", e))?
-            .with_descriptor(FlightDescriptor::new_cmd(vec![]))
-            .with_endpoint(endpoint)
-            .with_total_records(num_rows as i64)
-            .with_total_bytes(num_bytes as i64)
-            .with_ordered(false);
 
-        let res = Response::new(flight_info);
-        log::info!("response={:#?}", res);
-        Ok(res)
+        let statements = self.parse_sql(&query.query)?;
+        for statement in statements.iter() {
+            log::info!("statement={:#?}", statement.to_string());
+
+            match statement {
+                Statement::Query(_) => {
+                    let handle: String = Uuid::new_v4().to_string();
+
+                    let table = sql::get_table(statement).unwrap();
+
+                    let mut state = self.state.lock().await;
+
+                    if let Some(table) = state.get_table(&table).await {
+                        let batches = table.execute(statement).await?;
+                        if let Ok(Some(flight_info)) =
+                            self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
+                        {
+                            let mut handles = self.handles.lock().await;
+                            handles.insert(handle.clone(), batches);
+
+                            let res = Response::new(flight_info);
+                            log::info!("response={:#?}", res);
+                            return Ok(res);
+                        }
+                    }
+                }
+                _ => unimplemented!(),
+            }
+        }
+
+        Err(Status::not_found("No table or batches"))
     }
 
     async fn get_flight_info_substrait_plan(
@@ -237,38 +283,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("cmd={:#?}", cmd);
         log::info!("request={:#?}", request);
 
-        self.check_token(&request)?;
-        let handle = std::str::from_utf8(&cmd.prepared_statement_handle)
-            .map_err(|e| status!("Unable to parse handle", e))?;
-        let batch = Self::get_dummy_batch()?;
-        let schema = (*batch.schema()).clone();
-        let num_rows = batch.num_rows();
-        let num_bytes = batch.get_array_memory_size();
-        let loc = Location {
-            uri: "grpc://127.0.0.1".to_string(),
-        };
-        let fetch = FetchResults {
-            handle: handle.to_string(),
-        };
-        let ticket = Ticket {
-            ticket: fetch.as_any().encode_to_vec().into(),
-        };
-        let endpoint = FlightEndpoint {
-            ticket: Some(ticket),
-            location: vec![loc],
-        };
-        let flight_info = FlightInfo::new()
-            .try_with_schema(&schema)
-            .map_err(|e| status!("Unable to serialize schema", e))?
-            .with_descriptor(FlightDescriptor::new_cmd(vec![]))
-            .with_endpoint(endpoint)
-            .with_total_records(num_rows as i64)
-            .with_total_bytes(num_bytes as i64)
-            .with_ordered(false);
-
-        let res = Response::new(flight_info);
-        log::info!("response={:#?}", res);
-        Ok(res)
+        Err(Status::unimplemented(
+            "get_flight_info_prepared_statement not implemented",
+        ))
     }
 
     async fn get_flight_info_catalogs(
@@ -280,19 +297,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let flight_descriptor = request.into_inner();
-        let ticket = Ticket {
-            ticket: query.encode_to_vec().into(),
-        };
-        let endpoint = FlightEndpoint::new().with_ticket(ticket);
-
-        let flight_info = FlightInfo::new()
-            .try_with_schema(&query.into_builder().schema())
-            .map_err(|e| status!("Unable to encode schema", e))?
-            .with_endpoint(endpoint)
-            .with_descriptor(flight_descriptor);
-
-        Ok(Response::new(flight_info))
+        Err(Status::unimplemented(
+            "get_flight_info_catalogs not implemented",
+        ))
     }
 
     async fn get_flight_info_schemas(
@@ -304,19 +311,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let flight_descriptor = request.into_inner();
-        let ticket = Ticket {
-            ticket: query.encode_to_vec().into(),
-        };
-        let endpoint = FlightEndpoint::new().with_ticket(ticket);
-
-        let flight_info = FlightInfo::new()
-            .try_with_schema(&query.into_builder().schema())
-            .map_err(|e| status!("Unable to encode schema", e))?
-            .with_endpoint(endpoint)
-            .with_descriptor(flight_descriptor);
-
-        Ok(Response::new(flight_info))
+        Err(Status::unimplemented(
+            "get_flight_info_schemas not implemented",
+        ))
     }
 
     async fn get_flight_info_tables(
@@ -328,19 +325,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let flight_descriptor = request.into_inner();
-        let ticket = Ticket {
-            ticket: query.encode_to_vec().into(),
-        };
-        let endpoint = FlightEndpoint::new().with_ticket(ticket);
-
-        let flight_info = FlightInfo::new()
-            .try_with_schema(&query.into_builder().schema())
-            .map_err(|e| status!("Unable to encode schema", e))?
-            .with_endpoint(endpoint)
-            .with_descriptor(flight_descriptor);
-
-        Ok(Response::new(flight_info))
+        Err(Status::unimplemented(
+            "get_flight_info_tables not implemented",
+        ))
     }
 
     async fn get_flight_info_table_types(
@@ -371,7 +358,7 @@ impl FlightSqlService for FlightSqlServiceSimple {
         let endpoint = FlightEndpoint::new().with_ticket(ticket);
 
         let flight_info = FlightInfo::new()
-            .try_with_schema(query.into_builder(&SIMPLE_SQL_DATA).schema().as_ref())
+            .try_with_schema(query.into_builder(&SQL_INFO_DATA).schema().as_ref())
             .map_err(|e| status!("Unable to encode schema", e))?
             .with_endpoint(endpoint)
             .with_descriptor(flight_descriptor);
@@ -446,17 +433,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let flight_descriptor = request.into_inner();
-        let ticket = Ticket::new(query.encode_to_vec());
-        let endpoint = FlightEndpoint::new().with_ticket(ticket);
-
-        let flight_info = FlightInfo::new()
-            .try_with_schema(query.into_builder(&SIMPLE_XBDC_DATA).schema().as_ref())
-            .map_err(|e| status!("Unable to encode schema", e))?
-            .with_endpoint(endpoint)
-            .with_descriptor(flight_descriptor);
-
-        Ok(Response::new(flight_info))
+        Err(Status::unimplemented(
+            "get_flight_info_xdbc_type_info not implemented",
+        ))
     }
 
     async fn do_get_statement(
@@ -494,21 +473,7 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let catalog_names = SIMPLE_TABLES
-            .iter()
-            .map(|full_name| full_name.split('.').collect::<Vec<_>>()[0].to_string())
-            .collect::<HashSet<_>>();
-        let mut builder = query.into_builder();
-        for catalog_name in catalog_names {
-            builder.append(catalog_name);
-        }
-        let schema = builder.schema();
-        let batch = builder.build();
-        let stream = FlightDataEncoderBuilder::new()
-            .with_schema(schema)
-            .build(futures::stream::once(async { batch }))
-            .map_err(Status::from);
-        Ok(Response::new(Box::pin(stream)))
+        Err(Status::unimplemented("do_get_catalogs not implemented"))
     }
 
     async fn do_get_schemas(
@@ -520,26 +485,7 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let schemas = SIMPLE_TABLES
-            .iter()
-            .map(|full_name| {
-                let parts = full_name.split('.').collect::<Vec<_>>();
-                (parts[0].to_string(), parts[1].to_string())
-            })
-            .collect::<HashSet<_>>();
-
-        let mut builder = query.into_builder();
-        for (catalog_name, schema_name) in schemas {
-            builder.append(catalog_name, schema_name);
-        }
-
-        let schema = builder.schema();
-        let batch = builder.build();
-        let stream = FlightDataEncoderBuilder::new()
-            .with_schema(schema)
-            .build(futures::stream::once(async { batch }))
-            .map_err(Status::from);
-        Ok(Response::new(Box::pin(stream)))
+        Err(Status::unimplemented("do_get_schemas not implemented"))
     }
 
     async fn do_get_tables(
@@ -551,39 +497,7 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let tables = SIMPLE_TABLES
-            .iter()
-            .map(|full_name| {
-                let parts = full_name.split('.').collect::<Vec<_>>();
-                (
-                    parts[0].to_string(),
-                    parts[1].to_string(),
-                    parts[2].to_string(),
-                )
-            })
-            .collect::<HashSet<_>>();
-
-        let dummy_schema = Schema::empty();
-        let mut builder = query.into_builder();
-        for (catalog_name, schema_name, table_name) in tables {
-            builder
-                .append(
-                    catalog_name,
-                    schema_name,
-                    table_name,
-                    "TABLE",
-                    &dummy_schema,
-                )
-                .map_err(Status::from)?;
-        }
-
-        let schema = builder.schema();
-        let batch = builder.build();
-        let stream = FlightDataEncoderBuilder::new()
-            .with_schema(schema)
-            .build(futures::stream::once(async { batch }))
-            .map_err(Status::from);
-        Ok(Response::new(Box::pin(stream)))
+        Err(Status::unimplemented("do_get_tables not implemented"))
     }
 
     async fn do_get_table_types(
@@ -607,7 +521,7 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let builder = query.into_builder(&SIMPLE_SQL_DATA);
+        let builder = query.into_builder(&SQL_INFO_DATA);
         let schema = builder.schema();
         let batch = builder.build();
         let stream = FlightDataEncoderBuilder::new()
@@ -680,14 +594,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let builder = query.into_builder(&SIMPLE_XBDC_DATA);
-        let schema = builder.schema();
-        let batch = builder.build();
-        let stream = FlightDataEncoderBuilder::new()
-            .with_schema(schema)
-            .build(futures::stream::once(async { batch }))
-            .map_err(Status::from);
-        Ok(Response::new(Box::pin(stream)))
+        Err(Status::unimplemented(
+            "do_get_xdbc_type_info not implemented",
+        ))
     }
 
     async fn do_get_fallback(
@@ -700,22 +609,32 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("message={:#?}", message);
 
         self.check_token(&request)?;
-        let batch = Self::get_dummy_batch()?;
-        let schema = batch.schema();
-        let batches = vec![batch];
-        let flight_data =
-            flight::batches_to_flight_data(schema.as_ref(), batches, Some(CompressionType::ZSTD))
-                .map_err(|e| status!("Could not convert batches", e))?
-                .into_iter()
-                .map(Ok);
 
-        log::info!("data={:#?}", flight_data);
+        if let Some(fetch_results) = message.unpack::<FetchResults>().unwrap() {
+            let mut handles = self.handles.lock().await;
 
-        let stream: Pin<Box<dyn Stream<Item = Result<FlightData, Status>> + Send>> =
-            Box::pin(stream::iter(flight_data));
+            if let Some(batches) = handles.remove(&fetch_results.handle) {
+                if let Some(batch0) = batches.first() {
+                    let schema = batch0.schema();
+                    let num_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
+                    let num_bytes: usize = batches.iter().map(|b| b.get_array_memory_size()).sum();
+                    log::info!("schema={:#?}", schema);
+                    let flight_data =
+                        flight::batches_to_flight_data(schema.as_ref(), batches, self.compression)?
+                            .into_iter()
+                            .map(Ok);
 
-        let res = Response::new(stream);
-        Ok(res)
+                    let stream: Pin<Box<dyn Stream<Item = Result<FlightData, Status>> + Send>> =
+                        Box::pin(stream::iter(flight_data));
+
+                    let res = Response::new(stream);
+                    log::info!("response=rows={},bytes={}", num_rows, num_bytes);
+                    return Ok(res);
+                }
+            }
+        }
+
+        Err(Status::not_found("No data"))
     }
 
     async fn do_put_statement_update(
@@ -726,7 +645,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("do_put_statement_update");
         log::info!("ticket={:#?}", ticket);
 
-        Ok(SIMPLE_UPDATE_RESULT)
+        Err(Status::unimplemented(
+            "do_put_statement_update not implemented",
+        ))
     }
 
     async fn do_put_substrait_plan(
@@ -777,21 +698,9 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        self.check_token(&request)?;
-        let schema = Self::get_dummy_batch()?.schema();
-        let message = SchemaAsIpc::new(&schema, &IpcWriteOptions::default())
-            .try_into()
-            .map_err(|e| status!("Unable to serialize schema", e))?;
-        let IpcMessage(schema_bytes) = message;
-        let res = ActionCreatePreparedStatementResult {
-            prepared_statement_handle: SIMPLE_HANDLE.into(),
-            dataset_schema: schema_bytes,
-            parameter_schema: Default::default(),
-        };
-
-        log::info!("response={:#?}", res);
-
-        Ok(res)
+        Err(Status::unimplemented(
+            "do_action_create_prepared_statement not implemented",
+        ))
     }
 
     async fn do_action_close_prepared_statement(
