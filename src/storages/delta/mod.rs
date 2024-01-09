@@ -237,16 +237,8 @@ impl DQStorage for DQDeltaStorage {
                 SetExpr::Select(select) => {
                     if let (Some(selection), Some(batch0)) = (&select.selection, self.stats.first())
                     {
-                        let expressions = predicates::parse_expression(
-                            &selection,
-                            &self
-                                .schema
-                                .fields
-                                .iter()
-                                .map(|field| field.name().as_str())
-                                .collect(),
-                            false,
-                        );
+                        let expressions =
+                            predicates::parse_expression(&selection, &self.schema.fields, false);
 
                         log::info!("filters={:#?}", expressions);
 
