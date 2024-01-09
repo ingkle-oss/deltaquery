@@ -235,46 +235,55 @@ impl DQStorage for DQDeltaStorage {
         match statement {
             Statement::Query(query) => match query.body.as_ref() {
                 SetExpr::Select(select) => {
+                    let mut has_filters = false;
+
                     if let (Some(selection), Some(batch0)) = (&select.selection, self.stats.first())
                     {
-                        let expressions =
-                            predicates::parse_expression(&selection, &self.schema.fields, false);
+                        if let Some(expressions) = predicates::parse_expression(
+                            &selection,
+                            &batch0.schema().fields(),
+                            false,
+                        ) {
+                            log::info!("filters={:#?}", expressions);
 
-                        log::info!("filters={:#?}", expressions);
-
-                        let schema = batch0.schema();
-                        let predicates = create_physical_expr(
-                            &expressions,
-                            &schema.clone().to_dfschema().unwrap(),
-                            &schema,
-                            &ExecutionProps::new(),
-                        )?;
-
-                        for batch in self.stats.iter() {
-                            let results = predicates
-                                .evaluate(&batch)
-                                .ok()
-                                .unwrap()
-                                .into_array(batch.num_rows())
-                                .unwrap();
-                            let paths = as_string_array(
-                                batch
-                                    .column_by_name(statistics::STATS_TABLE_ADD_PATH)
-                                    .unwrap(),
+                            let schema = batch0.schema();
+                            let predicates = create_physical_expr(
+                                &expressions,
+                                &schema.clone().to_dfschema().unwrap(),
+                                &schema,
+                                &ExecutionProps::new(),
                             )?;
-                            for (result, path) in results.as_boolean().iter().zip(paths) {
-                                if let (Some(result), Some(path)) = (result, path) {
-                                    if result {
-                                        files.push(format!(
-                                            "{}/{}",
-                                            self.location,
-                                            path.to_string()
-                                        ));
+
+                            for batch in self.stats.iter() {
+                                let results = predicates
+                                    .evaluate(&batch)
+                                    .ok()
+                                    .unwrap()
+                                    .into_array(batch.num_rows())
+                                    .unwrap();
+                                let paths = as_string_array(
+                                    batch
+                                        .column_by_name(statistics::STATS_TABLE_ADD_PATH)
+                                        .unwrap(),
+                                )?;
+                                for (result, path) in results.as_boolean().iter().zip(paths) {
+                                    if let (Some(result), Some(path)) = (result, path) {
+                                        if result {
+                                            files.push(format!(
+                                                "{}/{}",
+                                                self.location,
+                                                path.to_string()
+                                            ));
+                                        }
                                     }
                                 }
                             }
+
+                            has_filters = true;
                         }
-                    } else {
+                    }
+
+                    if !has_filters {
                         files.extend(
                             self.files
                                 .keys()

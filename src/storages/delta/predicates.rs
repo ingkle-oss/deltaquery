@@ -3,69 +3,87 @@ use deltalake::datafusion::common::scalar::ScalarValue;
 use deltalake::datafusion::common::Column;
 use deltalake::datafusion::logical_expr::{Cast, Expr};
 
-fn get_binary_expression_with_minmax(
+pub fn parse_expression(
     predicates: &sqlparser::ast::Expr,
     fields: &Fields,
-) -> (Expr, Expr, Expr) {
-    match predicates {
-        sqlparser::ast::Expr::BinaryOp { left, right, .. } => {
-            let min = parse_expression(left, fields, false);
-            let max = parse_expression(left, fields, true);
-            let right = parse_expression(right, fields, false);
-
-            (min, max, right)
-        }
-        _ => unimplemented!(),
-    }
-}
-
-pub fn parse_expression(predicates: &sqlparser::ast::Expr, fields: &Fields, use_max: bool) -> Expr {
+    use_max: bool,
+) -> Option<Expr> {
     match predicates {
         sqlparser::ast::Expr::BinaryOp { left, op, right } => match op {
             sqlparser::ast::BinaryOperator::And => {
                 let left = parse_expression(left, fields, use_max);
                 let right = parse_expression(right, fields, use_max);
 
-                left.and(right)
+                match (left, right) {
+                    (Some(left), Some(right)) => Some(left.and(right)),
+                    (Some(left), None) => Some(left),
+                    (None, Some(right)) => Some(right),
+                    _ => None,
+                }
             }
             sqlparser::ast::BinaryOperator::Or => {
                 let left = parse_expression(left, fields, use_max);
                 let right = parse_expression(right, fields, use_max);
 
-                left.or(right)
+                match (left, right) {
+                    (Some(left), Some(right)) => Some(left.or(right)),
+                    _ => None,
+                }
             }
             sqlparser::ast::BinaryOperator::Eq => {
-                let (min, max, right) = get_binary_expression_with_minmax(predicates, fields);
+                let min = parse_expression(left, fields, false);
+                let max = parse_expression(left, fields, true);
+                let right = parse_expression(right, fields, false);
 
-                if min == max {
-                    min.eq(right)
+                if let (Some(min), Some(max), Some(right)) = (min, max, right) {
+                    if min == max {
+                        Some(min.eq(right))
+                    } else {
+                        Some(min.lt_eq(right.clone()).and(max.gt_eq(right)))
+                    }
                 } else {
-                    min.lt_eq(right.clone()).and(max.gt_eq(right))
+                    None
                 }
             }
             sqlparser::ast::BinaryOperator::Lt => {
                 let left = parse_expression(left, fields, use_max);
                 let right = parse_expression(right, fields, use_max);
 
-                left.lt(right)
+                if let (Some(left), Some(right)) = (left, right) {
+                    Some(left.lt(right))
+                } else {
+                    None
+                }
             }
             sqlparser::ast::BinaryOperator::LtEq => {
                 let left = parse_expression(left, fields, use_max);
                 let right = parse_expression(right, fields, use_max);
 
-                left.lt_eq(right)
+                if let (Some(left), Some(right)) = (left, right) {
+                    Some(left.lt_eq(right))
+                } else {
+                    None
+                }
             }
             sqlparser::ast::BinaryOperator::Gt => {
                 let left = parse_expression(left, fields, use_max);
                 let right = parse_expression(right, fields, use_max);
 
-                left.gt(right)
+                if let (Some(left), Some(right)) = (left, right) {
+                    Some(left.gt(right))
+                } else {
+                    None
+                }
             }
             sqlparser::ast::BinaryOperator::GtEq => {
                 let left = parse_expression(left, fields, use_max);
                 let right = parse_expression(right, fields, use_max);
 
-                left.gt_eq(right)
+                if let (Some(left), Some(right)) = (left, right) {
+                    Some(left.gt_eq(right))
+                } else {
+                    None
+                }
             }
             _ => unimplemented!(),
         },
@@ -86,27 +104,33 @@ pub fn parse_expression(predicates: &sqlparser::ast::Expr, fields: &Fields, use_
             };
 
             if let Some((_, field)) = fields.find(&column) {
-                match field.data_type() {
+                let expr = match field.data_type() {
                     DataType::Date32 | DataType::Date64 => Expr::Cast(Cast::new(
                         Box::new(Expr::Column(Column::from_name(column))),
                         DataType::Utf8,
                     )),
                     _ => Expr::Column(Column::from_name(column)),
-                }
+                };
+
+                Some(expr)
             } else {
-                Expr::Column(Column::from_name(column))
+                None
             }
         }
         sqlparser::ast::Expr::Value(value) => match value {
             sqlparser::ast::Value::Number(n, l) => {
                 if *l {
-                    Expr::Literal(ScalarValue::Int64(Some(n.parse::<i64>().unwrap())))
+                    Some(Expr::Literal(ScalarValue::Int64(Some(
+                        n.parse::<i64>().unwrap(),
+                    ))))
                 } else {
-                    Expr::Literal(ScalarValue::Int32(Some(n.parse::<i32>().unwrap())))
+                    Some(Expr::Literal(ScalarValue::Int32(Some(
+                        n.parse::<i32>().unwrap(),
+                    ))))
                 }
             }
             sqlparser::ast::Value::SingleQuotedString(s) => {
-                Expr::Literal(ScalarValue::Utf8(Some(s.clone())))
+                Some(Expr::Literal(ScalarValue::Utf8(Some(s.clone()))))
             }
             _ => unimplemented!(),
         },
