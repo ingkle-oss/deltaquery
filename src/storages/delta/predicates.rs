@@ -86,13 +86,12 @@ pub fn parse_expression(predicates: &sqlparser::ast::Expr, fields: &Fields, use_
             };
 
             if let Some((_, field)) = fields.find(&column) {
-                if field.data_type() != &DataType::Utf8 {
-                    Expr::Cast(Cast::new(
+                match field.data_type() {
+                    DataType::Date32 | DataType::Date64 => Expr::Cast(Cast::new(
                         Box::new(Expr::Column(Column::from_name(column))),
                         DataType::Utf8,
-                    ))
-                } else {
-                    Expr::Column(Column::from_name(column))
+                    )),
+                    _ => Expr::Column(Column::from_name(column)),
                 }
             } else {
                 Expr::Column(Column::from_name(column))
