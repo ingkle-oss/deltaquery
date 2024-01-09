@@ -84,6 +84,39 @@ pub fn get_projection(statement: &Statement) -> Vec<String> {
     projection
 }
 
+pub fn get_functions(statement: &Statement) -> Vec<String> {
+    let mut functions = Vec::new();
+
+    match statement {
+        Statement::Query(query) => match query.body.as_ref() {
+            SetExpr::Select(select) => {
+                for item in &select.projection {
+                    match item {
+                        SelectItem::UnnamedExpr(expr) => match expr {
+                            Expr::Function(func) => {
+                                let target = func
+                                    .name
+                                    .0
+                                    .iter()
+                                    .map(|o| o.value.clone())
+                                    .collect::<Vec<String>>();
+
+                                functions.push(target.join("."));
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+
+    functions
+}
+
 pub fn get_select_policy(statement: &Statement) -> DQSqlSelectPolicy {
     match statement {
         Statement::Query(query) => match query.body.as_ref() {
