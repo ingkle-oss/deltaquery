@@ -40,4 +40,4 @@ cargo run -p flight_sql -- --logfilter flight_sql=info --command statement-query
 
 # License
 
-Apache License 2.0, see [LICENSE](https://github.com/ingkle/deltaquery/blob/master/LICENSE).
+Apache License 2.0, see [LICENSE](https://github.com/ingkle-oss/deltaquery/blob/main/LICENSE).
