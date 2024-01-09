@@ -3,7 +3,7 @@ use crate::error::DQError;
 use crate::storage::DQStorage;
 use arrow::array::RecordBatch;
 use arrow::datatypes::SchemaRef;
-use sqlparser::ast::Statement;
+use sqlparser::ast::{SetExpr, Statement};
 
 pub struct DQTable {
     pub storage: Box<dyn DQStorage>,
@@ -26,10 +26,18 @@ impl DQTable {
     }
 
     pub async fn execute(&mut self, statement: &Statement) -> Result<Vec<RecordBatch>, DQError> {
-        let files = self.storage.execute(statement).await?;
-        let schema = self.storage.schema();
-        let batches = self.compute.execute(statement, schema, files).await?;
+        match statement {
+            Statement::Query(query) => match query.body.as_ref() {
+                SetExpr::Select(_) => {
+                    let files = self.storage.execute(statement).await?;
+                    let schema = self.storage.schema();
+                    let batches = self.compute.execute(statement, schema, files).await?;
 
-        Ok(batches)
+                    Ok(batches)
+                }
+                _ => unimplemented!(),
+            },
+            _ => unimplemented!(),
+        }
     }
 }

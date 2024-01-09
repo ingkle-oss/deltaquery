@@ -1,3 +1,4 @@
+use crate::commons::sql;
 use crate::compute::{DQCompute, DQComputeFactory};
 use crate::configs::{DQComputeConfig, DQFilesystemConfig, DQTableConfig};
 use crate::error::DQError;
@@ -5,7 +6,7 @@ use arrow::array::RecordBatch;
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use duckdb::{params, Connection};
-use sqlparser::ast::{SetExpr, Statement, TableFactor};
+use sqlparser::ast::Statement;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -45,48 +46,25 @@ impl DQCompute for DQDuckDBCompute {
     ) -> Result<Vec<RecordBatch>, DQError> {
         let mut batches = Vec::new();
 
-        match statement {
-            Statement::Query(query) => match query.body.as_ref() {
-                SetExpr::Select(select) => {
-                    let mut from = String::default();
+        if let Some(from) = sql::get_table(statement) {
+            log::info!("files={:#?}, {}", files, files.len());
 
-                    for table in &select.from {
-                        match &table.relation {
-                            TableFactor::Table { name, .. } => {
-                                let target = name
-                                    .0
-                                    .iter()
-                                    .map(|o| o.value.clone())
-                                    .collect::<Vec<String>>();
+            if files.len() > 0 {
+                let engine = self.engine.lock().await;
 
-                                from = target.join(".");
-                            }
-                            _ => unimplemented!(),
-                        }
-                    }
+                let files = files
+                    .iter()
+                    .map(|file| format!("'{}'", file))
+                    .collect::<Vec<String>>()
+                    .join(",");
 
-                    log::info!("files={:#?}, {}", files, files.len());
+                let mut stmt = engine.prepare(&statement.to_string().replace(
+                    &from,
+                    &format!("read_parquet([{}], union_by_name=true)", files),
+                ))?;
 
-                    if files.len() > 0 {
-                        let engine = self.engine.lock().await;
-
-                        let files = files
-                            .iter()
-                            .map(|file| format!("'{}'", file))
-                            .collect::<Vec<String>>()
-                            .join(",");
-
-                        let mut stmt = engine.prepare(&statement.to_string().replace(
-                            &from,
-                            &format!("read_parquet([{}], union_by_name=true)", files),
-                        ))?;
-
-                        batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());
-                    }
-                }
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
+                batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());
+            }
         }
 
         Ok(batches)
