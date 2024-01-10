@@ -233,8 +233,8 @@ impl DQStorage for DQDeltaStorage {
         let mut files: Vec<String> = Vec::new();
 
         match statement {
-            Statement::Query(query) => match query.body.as_ref() {
-                SetExpr::Select(select) => {
+            Statement::Query(query) => {
+                if let SetExpr::Select(select) = query.body.as_ref() {
                     let mut has_filters = false;
 
                     if let (Some(selection), Some(batch0)) = (&select.selection, self.stats.first())
@@ -292,8 +292,7 @@ impl DQStorage for DQDeltaStorage {
                         );
                     }
                 }
-                _ => unreachable!(),
-            },
+            }
             _ => unreachable!(),
         }
 
