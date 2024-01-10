@@ -4,8 +4,8 @@ use sqlparser::ast::{
 
 pub fn get_table(statement: &Statement) -> Option<String> {
     match statement {
-        Statement::Query(query) => match query.body.as_ref() {
-            SetExpr::Select(select) => {
+        Statement::Query(query) => {
+            if let SetExpr::Select(select) = query.body.as_ref() {
                 for table in &select.from {
                     match &table.relation {
                         TableFactor::Table { name, .. } => {
@@ -21,8 +21,7 @@ pub fn get_table(statement: &Statement) -> Option<String> {
                     }
                 }
             }
-            _ => {}
-        },
+        }
         Statement::Insert { table_name, .. } => {
             let target = table_name
                 .0
@@ -42,8 +41,8 @@ pub fn get_columns(statement: &Statement) -> Vec<String> {
     let mut items = Vec::new();
 
     match statement {
-        Statement::Query(query) => match query.body.as_ref() {
-            SetExpr::Select(select) => {
+        Statement::Query(query) => {
+            if let SetExpr::Select(select) = query.body.as_ref() {
                 for item in &select.projection {
                     match item {
                         SelectItem::UnnamedExpr(expr) => match expr {
@@ -69,20 +68,19 @@ pub fn get_columns(statement: &Statement) -> Vec<String> {
                             Expr::Value(value) => {
                                 items.push(value.to_string());
                             }
-                            _ => unimplemented!(),
+                            _ => {}
                         },
-                        _ => unimplemented!(),
+                        _ => {}
                     }
                 }
             }
-            _ => unimplemented!(),
-        },
+        }
         Statement::Insert { columns, .. } => {
             for column in columns {
                 items.push(column.value.clone());
             }
         }
-        _ => unimplemented!(),
+        _ => {}
     }
 
     items
@@ -92,8 +90,8 @@ pub fn get_functions(statement: &Statement) -> Vec<String> {
     let mut items = Vec::new();
 
     match statement {
-        Statement::Query(query) => match query.body.as_ref() {
-            SetExpr::Select(select) => {
+        Statement::Query(query) => {
+            if let SetExpr::Select(select) = query.body.as_ref() {
                 for item in &select.projection {
                     match item {
                         SelectItem::UnnamedExpr(expr) => match expr {
@@ -113,8 +111,7 @@ pub fn get_functions(statement: &Statement) -> Vec<String> {
                     }
                 }
             }
-            _ => {}
-        },
+        }
         _ => {}
     }
 

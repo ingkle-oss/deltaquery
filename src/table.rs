@@ -28,16 +28,17 @@ impl DQTable {
 
     pub async fn execute(&mut self, statement: &Statement) -> Result<Vec<RecordBatch>, DQError> {
         match statement {
-            Statement::Query(query) => match query.body.as_ref() {
-                SetExpr::Select(_) => {
+            Statement::Query(query) => {
+                if let SetExpr::Select(_) = query.body.as_ref() {
                     let files = self.storage.select(statement).await?;
                     let schema = self.storage.schema();
                     let batches = self.compute.select(statement, schema, files).await?;
 
                     Ok(batches)
+                } else {
+                    unimplemented!()
                 }
-                _ => unimplemented!(),
-            },
+            }
             Statement::Insert { .. } => {
                 self.storage.insert(statement).await?;
 
