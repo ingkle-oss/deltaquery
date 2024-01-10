@@ -229,7 +229,7 @@ impl DQStorage for DQDeltaStorage {
         Ok(())
     }
 
-    async fn execute(&mut self, statement: &Statement) -> Result<Vec<String>, DQError> {
+    async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, DQError> {
         let mut files: Vec<String> = Vec::new();
 
         match statement {
@@ -298,6 +298,10 @@ impl DQStorage for DQDeltaStorage {
         }
 
         Ok(files)
+    }
+
+    async fn insert(&mut self, _statement: &Statement) -> Result<(), DQError> {
+        Ok(())
     }
 
     fn schema(&self) -> Option<SchemaRef> {
@@ -388,12 +392,12 @@ mod tests {
         let dialect = GenericDialect {};
 
         let statements = Parser::parse_sql(&dialect, "select * from test0").unwrap();
-        let files = storage.execute(statements.first().unwrap()).await.unwrap();
+        let files = storage.select(statements.first().unwrap()).await.unwrap();
         assert_eq!(files.len(), 2);
 
         let statements =
             Parser::parse_sql(&dialect, "select * from test0 where value >= 0").unwrap();
-        let files = storage.execute(statements.first().unwrap()).await.unwrap();
+        let files = storage.select(statements.first().unwrap()).await.unwrap();
         assert_eq!(files.len(), 2);
     }
 
@@ -446,7 +450,7 @@ mod tests {
 
         let statements =
             Parser::parse_sql(&dialect, "select * from test0 where value >= 0").unwrap();
-        let files = storage.execute(statements.first().unwrap()).await.unwrap();
+        let files = storage.select(statements.first().unwrap()).await.unwrap();
         assert_eq!(files.len(), 2);
     }
 }
