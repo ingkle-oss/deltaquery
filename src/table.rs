@@ -2,8 +2,9 @@ use crate::compute::DQCompute;
 use crate::error::DQError;
 use crate::storage::DQStorage;
 use arrow::array::RecordBatch;
-use arrow::datatypes::SchemaRef;
+use arrow::datatypes::{Schema, SchemaRef};
 use sqlparser::ast::{SetExpr, Statement};
+use std::sync::Arc;
 
 pub struct DQTable {
     pub storage: Box<dyn DQStorage>,
@@ -29,14 +30,21 @@ impl DQTable {
         match statement {
             Statement::Query(query) => match query.body.as_ref() {
                 SetExpr::Select(_) => {
-                    let files = self.storage.execute(statement).await?;
+                    let files = self.storage.select(statement).await?;
                     let schema = self.storage.schema();
-                    let batches = self.compute.execute(statement, schema, files).await?;
+                    let batches = self.compute.select(statement, schema, files).await?;
 
                     Ok(batches)
                 }
                 _ => unimplemented!(),
             },
+            Statement::Insert { .. } => {
+                self.storage.insert(statement).await?;
+
+                let batches = vec![RecordBatch::new_empty(Arc::new(Schema::empty()))];
+
+                Ok(batches)
+            }
             _ => unimplemented!(),
         }
     }

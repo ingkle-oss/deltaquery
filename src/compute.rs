@@ -13,7 +13,7 @@ static COMPUTE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQComputeFactory>>>
 
 #[async_trait]
 pub trait DQCompute: Send + Sync {
-    async fn execute(
+    async fn select(
         &mut self,
         statement: &Statement,
         schema: Option<SchemaRef>,

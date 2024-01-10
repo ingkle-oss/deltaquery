@@ -38,7 +38,7 @@ impl DQDuckDBCompute {
 
 #[async_trait]
 impl DQCompute for DQDuckDBCompute {
-    async fn execute(
+    async fn select(
         &mut self,
         statement: &Statement,
         _schema: Option<SchemaRef>,
