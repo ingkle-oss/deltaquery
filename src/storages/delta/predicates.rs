@@ -87,6 +87,26 @@ pub fn parse_expression(
             }
             _ => unimplemented!(),
         },
+        sqlparser::ast::Expr::Between {
+            expr,
+            negated,
+            low,
+            high,
+        } => {
+            let expr = parse_expression(expr, fields, use_max);
+            let low = parse_expression(low, fields, use_max);
+            let high = parse_expression(high, fields, use_max);
+
+            if let (Some(expr), Some(low), Some(high)) = (expr, low, high) {
+                if *negated {
+                    Some(expr.not_between(low, high))
+                } else {
+                    Some(expr.between(low, high))
+                }
+            } else {
+                None
+            }
+        }
         sqlparser::ast::Expr::Identifier(ident) => {
             let name = ident.value.clone();
             let column = if use_max {
