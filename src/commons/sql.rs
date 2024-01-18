@@ -1,6 +1,4 @@
-use sqlparser::ast::{
-    Expr, FunctionArg, FunctionArgExpr, SelectItem, SetExpr, Statement, TableFactor,
-};
+use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement, TableFactor};
 
 pub fn get_table(statement: &Statement) -> Option<String> {
     match statement {
@@ -37,172 +35,6 @@ pub fn get_table(statement: &Statement) -> Option<String> {
     None
 }
 
-pub fn get_columns(statement: &Statement) -> Vec<String> {
-    let mut items = Vec::new();
-
-    match statement {
-        Statement::Query(query) => {
-            if let SetExpr::Select(select) = query.body.as_ref() {
-                for item in &select.projection {
-                    match item {
-                        SelectItem::UnnamedExpr(expr) => match expr {
-                            Expr::Identifier(ident) => {
-                                items.push(ident.value.clone());
-                            }
-                            Expr::Function(func) => {
-                                for arg in &func.args {
-                                    match arg {
-                                        FunctionArg::Unnamed(expr) => match expr {
-                                            FunctionArgExpr::Expr(expr) => match expr {
-                                                Expr::Identifier(ident) => {
-                                                    items.push(ident.value.clone());
-                                                }
-                                                _ => unimplemented!(),
-                                            },
-                                            _ => unimplemented!(),
-                                        },
-                                        _ => unimplemented!(),
-                                    }
-                                }
-                            }
-                            Expr::Value(value) => {
-                                items.push(value.to_string());
-                            }
-                            _ => {}
-                        },
-                        SelectItem::ExprWithAlias { expr, .. } => match expr {
-                            Expr::Identifier(ident) => {
-                                items.push(ident.value.clone());
-                            }
-                            Expr::Function(func) => {
-                                for arg in &func.args {
-                                    match arg {
-                                        FunctionArg::Unnamed(expr) => match expr {
-                                            FunctionArgExpr::Expr(expr) => match expr {
-                                                Expr::Identifier(ident) => {
-                                                    items.push(ident.value.clone());
-                                                }
-                                                _ => unimplemented!(),
-                                            },
-                                            _ => unimplemented!(),
-                                        },
-                                        _ => unimplemented!(),
-                                    }
-                                }
-                            }
-                            Expr::Value(value) => {
-                                items.push(value.to_string());
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                }
-            }
-        }
-        Statement::Insert { columns, .. } => {
-            for column in columns {
-                items.push(column.value.clone());
-            }
-        }
-        _ => {}
-    }
-
-    items
-}
-
-pub fn get_columns_with_alias(statement: &Statement) -> Vec<(String, String)> {
-    let mut items = Vec::new();
-
-    match statement {
-        Statement::Query(query) => {
-            if let SetExpr::Select(select) = query.body.as_ref() {
-                for item in &select.projection {
-                    match item {
-                        SelectItem::UnnamedExpr(expr) => match expr {
-                            Expr::Identifier(ident) => {
-                                items.push((ident.value.clone(), ident.value.clone()));
-                            }
-                            Expr::Function(func) => {
-                                let funcname = func
-                                    .name
-                                    .0
-                                    .iter()
-                                    .map(|o| o.value.clone())
-                                    .collect::<Vec<String>>()
-                                    .join(".");
-
-                                for arg in &func.args {
-                                    match arg {
-                                        FunctionArg::Unnamed(expr) => match expr {
-                                            FunctionArgExpr::Expr(expr) => match expr {
-                                                Expr::Identifier(ident) => {
-                                                    items.push((
-                                                        ident.value.clone(),
-                                                        format!(
-                                                            "{}({})",
-                                                            funcname,
-                                                            ident.value.clone()
-                                                        ),
-                                                    ));
-                                                }
-                                                _ => unimplemented!(),
-                                            },
-                                            _ => unimplemented!(),
-                                        },
-                                        _ => unimplemented!(),
-                                    }
-                                }
-                            }
-                            Expr::Value(value) => {
-                                items.push((value.to_string(), value.to_string()));
-                            }
-                            _ => {}
-                        },
-                        SelectItem::ExprWithAlias { expr, alias } => match expr {
-                            Expr::Identifier(ident) => {
-                                items.push((ident.value.clone(), alias.value.clone()));
-                            }
-                            Expr::Function(func) => {
-                                for arg in &func.args {
-                                    match arg {
-                                        FunctionArg::Unnamed(expr) => match expr {
-                                            FunctionArgExpr::Expr(expr) => match expr {
-                                                Expr::Identifier(ident) => {
-                                                    items.push((
-                                                        ident.value.clone(),
-                                                        alias.value.clone(),
-                                                    ));
-                                                }
-                                                _ => unimplemented!(),
-                                            },
-                                            _ => unimplemented!(),
-                                        },
-                                        _ => unimplemented!(),
-                                    }
-                                }
-                            }
-                            Expr::Value(value) => {
-                                items.push((value.to_string(), alias.value.clone()));
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                }
-            }
-        }
-        Statement::Insert { columns, .. } => {
-            for column in columns {
-                items.push((column.value.clone(), column.value.clone()));
-            }
-        }
-        _ => {}
-    }
-
-    items
-}
-
 pub fn get_functions(statement: &Statement) -> Vec<String> {
     let mut items = Vec::new();
 
@@ -212,6 +44,19 @@ pub fn get_functions(statement: &Statement) -> Vec<String> {
                 for item in &select.projection {
                     match item {
                         SelectItem::UnnamedExpr(expr) => match expr {
+                            Expr::Function(func) => {
+                                let target = func
+                                    .name
+                                    .0
+                                    .iter()
+                                    .map(|o| o.value.clone())
+                                    .collect::<Vec<String>>();
+
+                                items.push(target.join("."));
+                            }
+                            _ => {}
+                        },
+                        SelectItem::ExprWithAlias { expr, .. } => match expr {
                             Expr::Function(func) => {
                                 let target = func
                                     .name
