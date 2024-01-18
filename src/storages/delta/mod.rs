@@ -30,6 +30,8 @@ struct DQDeltaFile {
 
     from: i64,
     to: i64,
+
+    rank: usize,
 }
 
 pub struct DQDeltaStorage {
@@ -131,6 +133,7 @@ impl DQDeltaStorage {
                         add: add.clone(),
                         from: version,
                         to: i64::MAX,
+                        rank: self.files.len(),
                     },
                 );
             } else if let Action::Remove(remove) = action {
@@ -230,7 +233,7 @@ impl DQStorage for DQDeltaStorage {
     }
 
     async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, DQError> {
-        let mut files: Vec<String> = Vec::new();
+        let mut files: Vec<&DQDeltaFile> = Vec::new();
 
         match statement {
             Statement::Query(query) => {
@@ -269,11 +272,9 @@ impl DQStorage for DQDeltaStorage {
                                 for (result, path) in results.as_boolean().iter().zip(paths) {
                                     if let (Some(result), Some(path)) = (result, path) {
                                         if result {
-                                            files.push(format!(
-                                                "{}/{}",
-                                                self.location,
-                                                path.to_string()
-                                            ));
+                                            if let Some(file) = self.files.get(path) {
+                                                files.push(file);
+                                            }
                                         }
                                     }
                                 }
@@ -284,19 +285,19 @@ impl DQStorage for DQDeltaStorage {
                     }
 
                     if !has_filters {
-                        files.extend(
-                            self.files
-                                .keys()
-                                .map(|path| format!("{}/{}", self.location, path))
-                                .collect::<Vec<_>>(),
-                        );
+                        files.extend(self.files.values());
                     }
                 }
             }
             _ => unreachable!(),
         }
 
-        Ok(files)
+        files.sort_by(|a, b| a.rank.cmp(&b.rank));
+
+        Ok(files
+            .iter()
+            .map(|file| format!("{}/{}", self.location, file.add.path))
+            .collect())
     }
 
     async fn insert(&mut self, _statement: &Statement) -> Result<(), DQError> {
