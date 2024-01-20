@@ -141,8 +141,9 @@ pub fn get_record_batch_from_actions(
     actions: &Vec<Action>,
     schema: &SchemaRef,
     predicates: Option<&Vec<String>>,
-    use_datetime_statistics: Option<&String>,
-    datetime_template: Option<&String>,
+    timestamp_field: Option<&String>,
+    timestamp_template: &String,
+    timestamp_duration: &Duration,
 ) -> Result<RecordBatch, DQError> {
     let fields0 = match predicates {
         Some(predicates) => schema
@@ -154,15 +155,15 @@ pub fn get_record_batch_from_actions(
     };
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
 
-    let mut datetimes = HashMap::<String, Vec<String>>::new();
-
     let mut tera = tera::Tera::default();
 
-    if let (Some(datetime), Some(template)) = (use_datetime_statistics, datetime_template) {
-        let _ = tera.add_raw_template(datetime, &template)?;
+    let mut timestamp_variables = Vec::new();
 
-        let template = tera.get_template(datetime)?;
-        datetimes.insert(datetime.clone(), get_variables_from_tera_template(template));
+    if let Some(field) = timestamp_field {
+        let _ = tera.add_raw_template(field, &timestamp_template)?;
+
+        let template = tera.get_template(field)?;
+        timestamp_variables = get_variables_from_tera_template(template);
     }
 
     let mut fields = Vec::new();
@@ -280,22 +281,22 @@ pub fn get_record_batch_from_actions(
                 }
             }
 
-            for (datetime, variables) in &datetimes {
-                let name_min = datetime.clone();
-                let name_max = [datetime, "max"].join(".");
+            if let Some(field) = timestamp_field {
+                let name_min = field.clone();
+                let name_max = [field, "max"].join(".");
 
                 let mut context = tera::Context::new();
 
-                for variable in variables {
+                for variable in &timestamp_variables {
                     if let Some(Some(value)) = partitions.get(variable) {
                         context.insert(variable, value);
                     }
                 }
 
-                let content = tera.render(datetime, &context)?;
+                let content = tera.render(field, &context)?;
 
                 let value_min = DateTime::parse_from_str(&content, "%Y-%m-%d %H:%M:%S %z").unwrap();
-                let value_max = value_min + Duration::hours(1);
+                let value_max = value_min + *timestamp_duration;
 
                 match columns.get_mut(&name_min) {
                     Some(values) => {
