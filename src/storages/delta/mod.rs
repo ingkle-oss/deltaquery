@@ -51,6 +51,9 @@ pub struct DQDeltaStorage {
 
     stats: Vec<RecordBatch>,
     max_stats_batches: usize,
+
+    use_datetime_statistics: Option<String>,
+    datetime_template: Option<String>,
 }
 
 impl DQDeltaStorage {
@@ -116,6 +119,8 @@ impl DQDeltaStorage {
             max_stats_batches: storage_options
                 .get("max_stats_batches")
                 .map_or(32, |v| v.parse().unwrap()),
+            use_datetime_statistics: storage_options.get("use_datetime_statistics").cloned(),
+            datetime_template: storage_options.get("datetime_template").cloned(),
         }
     }
 
@@ -160,6 +165,8 @@ impl DQDeltaStorage {
             &actions,
             &self.schema,
             self.predicates.as_ref(),
+            self.use_datetime_statistics.as_ref(),
+            self.datetime_template.as_ref(),
         )?;
         self.stats.push(batch);
 
@@ -258,24 +265,27 @@ impl DQStorage for DQDeltaStorage {
                             )?;
 
                             for batch in self.stats.iter() {
-                                let results = predicates
-                                    .evaluate(&batch)
-                                    .ok()
-                                    .unwrap()
-                                    .into_array(batch.num_rows())
-                                    .unwrap();
-                                let paths = as_string_array(
-                                    batch
-                                        .column_by_name(statistics::STATS_TABLE_ADD_PATH)
-                                        .unwrap(),
-                                )?;
-                                for (result, path) in results.as_boolean().iter().zip(paths) {
-                                    if let (Some(result), Some(path)) = (result, path) {
-                                        if result {
-                                            if let Some(file) = self.files.get(path) {
-                                                files.push(file);
+                                match predicates.evaluate(&batch) {
+                                    Ok(results) => {
+                                        let results = results.into_array(batch.num_rows()).unwrap();
+                                        let paths = as_string_array(
+                                            batch
+                                                .column_by_name(statistics::STATS_TABLE_ADD_PATH)
+                                                .unwrap(),
+                                        )?;
+                                        for (result, path) in results.as_boolean().iter().zip(paths)
+                                        {
+                                            if let (Some(result), Some(path)) = (result, path) {
+                                                if result {
+                                                    if let Some(file) = self.files.get(path) {
+                                                        files.push(file);
+                                                    }
+                                                }
                                             }
                                         }
+                                    }
+                                    Err(err) => {
+                                        log::error!("could not evaluate predicates: {:?}", err);
                                     }
                                 }
                             }

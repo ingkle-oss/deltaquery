@@ -1,4 +1,4 @@
-use arrow::datatypes::{DataType, Fields};
+use arrow::datatypes::{DataType, Fields, TimeUnit};
 use deltalake::datafusion::common::scalar::ScalarValue;
 use deltalake::datafusion::common::Column;
 use deltalake::datafusion::logical_expr::{Cast, Expr};
@@ -93,15 +93,22 @@ pub fn parse_expression(
             low,
             high,
         } => {
-            let expr = parse_expression(expr, fields, use_max);
+            let min = parse_expression(expr, fields, false);
+            let max = parse_expression(expr, fields, true);
             let low = parse_expression(low, fields, use_max);
             let high = parse_expression(high, fields, use_max);
 
-            if let (Some(expr), Some(low), Some(high)) = (expr, low, high) {
+            if let (Some(min), Some(max), Some(low), Some(high)) = (min, max, low, high) {
                 if *negated {
-                    Some(expr.not_between(low, high))
+                    Some(
+                        min.not_between(low.clone(), high.clone())
+                            .and(max.not_between(low, high)),
+                    )
                 } else {
-                    Some(expr.between(low, high))
+                    Some(
+                        min.between(low.clone(), high.clone())
+                            .or(max.between(low, high)),
+                    )
                 }
             } else {
                 None
@@ -126,6 +133,10 @@ pub fn parse_expression(
             if let Some((_, field)) = fields.find(&column) {
                 let expr = match field.data_type() {
                     DataType::Date32 | DataType::Date64 => Expr::Cast(Cast::new(
+                        Box::new(Expr::Column(Column::from_name(column))),
+                        DataType::Utf8,
+                    )),
+                    DataType::Timestamp(TimeUnit::Microsecond, None) => Expr::Cast(Cast::new(
                         Box::new(Expr::Column(Column::from_name(column))),
                         DataType::Utf8,
                     )),
