@@ -6,6 +6,7 @@ use arrow::array::cast::AsArray;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
+use chrono::Duration;
 use deltalake::datafusion::common::cast::as_string_array;
 use deltalake::datafusion::common::ToDFSchema;
 use deltalake::datafusion::physical_expr::create_physical_expr;
@@ -52,8 +53,9 @@ pub struct DQDeltaStorage {
     stats: Vec<RecordBatch>,
     max_stats_batches: usize,
 
-    use_datetime_statistics: Option<String>,
-    datetime_template: Option<String>,
+    timestamp_field: Option<String>,
+    timestamp_template: String,
+    timestamp_duration: Duration,
 }
 
 impl DQDeltaStorage {
@@ -119,8 +121,17 @@ impl DQDeltaStorage {
             max_stats_batches: storage_options
                 .get("max_stats_batches")
                 .map_or(32, |v| v.parse().unwrap()),
-            use_datetime_statistics: storage_options.get("use_datetime_statistics").cloned(),
-            datetime_template: storage_options.get("datetime_template").cloned(),
+            timestamp_field: storage_options.get("timestamp_field").cloned(),
+            timestamp_template: storage_options
+                .get("timestamp_template")
+                .map_or(String::from("{{ date }} {{ hour }}:00:00 +00:00"), |v| {
+                    v.clone()
+                }),
+            timestamp_duration: storage_options
+                .get("timestamp_duration")
+                .map_or(Duration::hours(1), |v| {
+                    duration_str::parse_chrono(v).unwrap()
+                }),
         }
     }
 
@@ -165,8 +176,9 @@ impl DQDeltaStorage {
             &actions,
             &self.schema,
             self.predicates.as_ref(),
-            self.use_datetime_statistics.as_ref(),
-            self.datetime_template.as_ref(),
+            self.timestamp_field.as_ref(),
+            &self.timestamp_template,
+            &self.timestamp_duration,
         )?;
         self.stats.push(batch);
 
