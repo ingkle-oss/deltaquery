@@ -119,24 +119,6 @@ fn get_scalar_value(
     }
 }
 
-fn get_variables_from_tera_template(template: &tera::Template) -> Vec<String> {
-    let mut variables = Vec::new();
-
-    for node in &template.ast {
-        match node {
-            tera::ast::Node::VariableBlock(_, expr) => match &expr.val {
-                tera::ast::ExprVal::Ident(ident) => {
-                    variables.push(ident.clone());
-                }
-                _ => {}
-            },
-            _ => {}
-        }
-    }
-
-    variables
-}
-
 pub fn get_record_batch_from_actions(
     actions: &Vec<Action>,
     schema: &SchemaRef,
@@ -161,9 +143,23 @@ pub fn get_record_batch_from_actions(
     let timestamp_variables = match timestamp_field {
         Some(field) => {
             let _ = tera.add_raw_template(field, &timestamp_template)?;
-
             let template = tera.get_template(field)?;
-            get_variables_from_tera_template(template)
+
+            let mut variables = Vec::new();
+
+            for node in &template.ast {
+                match node {
+                    tera::ast::Node::VariableBlock(_, expr) => match &expr.val {
+                        tera::ast::ExprVal::Ident(ident) => {
+                            variables.push(ident.clone());
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+
+            variables
         }
         None => vec![],
     };
