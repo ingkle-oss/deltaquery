@@ -154,19 +154,19 @@ pub fn get_record_batch_from_actions(
         None => schema.fields().iter().collect::<Vec<&FieldRef>>(),
     };
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
+    let mut fields = Vec::new();
 
     let mut tera = tera::Tera::default();
 
-    let mut timestamp_variables = Vec::new();
+    let timestamp_variables = match timestamp_field {
+        Some(field) => {
+            let _ = tera.add_raw_template(field, &timestamp_template)?;
 
-    if let Some(field) = timestamp_field {
-        let _ = tera.add_raw_template(field, &timestamp_template)?;
-
-        let template = tera.get_template(field)?;
-        timestamp_variables = get_variables_from_tera_template(template);
-    }
-
-    let mut fields = Vec::new();
+            let template = tera.get_template(field)?;
+            get_variables_from_tera_template(template)
+        }
+        None => vec![],
+    };
 
     for action in actions {
         if let Action::Add(add) = action {
