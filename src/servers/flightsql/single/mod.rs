@@ -4,6 +4,7 @@ use crate::error::DQError;
 use crate::servers::flightsql::helpers::FetchResults;
 use crate::state::DQState;
 use arrow::array::RecordBatch;
+use arrow::datatypes::Schema;
 use arrow_flight::encode::FlightDataEncoderBuilder;
 use arrow_flight::sql::metadata::{SqlInfoData, SqlInfoDataBuilder};
 use arrow_flight::sql::server::PeekableFlightDataStream;
@@ -27,11 +28,12 @@ use arrow_flight::{
 use arrow_ipc::CompressionType;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use deltalake::datafusion::prelude::*;
 use futures::{stream, Stream, TryStreamExt};
 use once_cell::sync::Lazy;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sqlparser::ast::Statement;
+use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::collections::HashMap;
@@ -235,22 +237,40 @@ impl FlightSqlService for FlightSqlServiceSingle {
                 Statement::Query(_) => {
                     let handle: String = Uuid::new_v4().to_string();
 
-                    let table = sql::get_table(statement).unwrap();
+                    let batches = match sql::get_table(statement) {
+                        Some(table) => {
+                            let mut state = self.state.lock().await;
 
-                    let mut state = self.state.lock().await;
-
-                    if let Some(table) = state.get_table(&table).await {
-                        let batches = table.execute(statement).await?;
-                        if let Ok(Some(flight_info)) =
-                            self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
-                        {
-                            let mut handles = self.handles.lock().await;
-                            handles.insert(handle.clone(), batches);
-
-                            let res = Response::new(flight_info);
-                            log::info!("response={:#?}", res);
-                            return Ok(res);
+                            if let Some(table) = state.get_table(&table).await {
+                                table.execute(statement).await?
+                            } else {
+                                vec![RecordBatch::new_empty(Arc::new(Schema::empty()))]
+                            }
                         }
+                        None => match statement {
+                            Statement::Query(query) => {
+                                if let SetExpr::Select(_) = query.body.as_ref() {
+                                    let ctx = SessionContext::new();
+                                    let df = ctx.sql(&statement.to_string()).await.unwrap();
+
+                                    df.collect().await.unwrap()
+                                } else {
+                                    vec![RecordBatch::new_empty(Arc::new(Schema::empty()))]
+                                }
+                            }
+                            _ => vec![RecordBatch::new_empty(Arc::new(Schema::empty()))],
+                        },
+                    };
+
+                    if let Ok(Some(flight_info)) =
+                        self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
+                    {
+                        let mut handles = self.handles.lock().await;
+                        handles.insert(handle.clone(), batches);
+
+                        let res = Response::new(flight_info);
+                        log::info!("response={:#?}", res);
+                        return Ok(res);
                     }
                 }
                 _ => unimplemented!(),
