@@ -152,11 +152,11 @@ pub fn parse_expression(
             sqlparser::ast::Value::Number(n, l) => {
                 if *l {
                     Some(Expr::Literal(ScalarValue::Int64(Some(
-                        n.parse::<i64>().unwrap(),
+                        n.parse::<i64>().expect("could not parse int64"),
                     ))))
                 } else {
                     Some(Expr::Literal(ScalarValue::Int32(Some(
-                        n.parse::<i32>().unwrap(),
+                        n.parse::<i32>().expect("could not parse int32"),
                     ))))
                 }
             }

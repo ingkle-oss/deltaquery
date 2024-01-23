@@ -1,39 +1,4 @@
-use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement, TableFactor};
-
-pub fn get_table(statement: &Statement) -> Option<String> {
-    match statement {
-        Statement::Query(query) => {
-            if let SetExpr::Select(select) = query.body.as_ref() {
-                for table in &select.from {
-                    match &table.relation {
-                        TableFactor::Table { name, .. } => {
-                            let target = name
-                                .0
-                                .iter()
-                                .map(|o| o.value.clone())
-                                .collect::<Vec<String>>();
-
-                            return Some(target.join("."));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        Statement::Insert { table_name, .. } => {
-            let target = table_name
-                .0
-                .iter()
-                .map(|o| o.value.clone())
-                .collect::<Vec<String>>();
-
-            return Some(target.join("."));
-        }
-        _ => {}
-    }
-
-    None
-}
+use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
 
 pub fn get_functions(statement: &Statement) -> Vec<String> {
     let mut items = Vec::new();

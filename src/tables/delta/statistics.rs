@@ -167,7 +167,7 @@ pub fn get_record_batch_from_actions(
     for action in actions {
         if let Action::Add(add) = action {
             let partitions = &add.partition_values;
-            let stats = add.get_stats().unwrap();
+            let stats = add.get_stats()?;
             for field in &fields0 {
                 let data_type = field.data_type();
 
@@ -291,7 +291,7 @@ pub fn get_record_batch_from_actions(
 
                 let content = tera.render(field, &context)?;
 
-                let value_min = DateTime::parse_from_str(&content, "%Y-%m-%d %H:%M:%S %z").unwrap();
+                let value_min = DateTime::parse_from_str(&content, "%Y-%m-%d %H:%M:%S %z")?;
                 let value_max = value_min + *timestamp_duration;
 
                 match columns.get_mut(&name_min) {

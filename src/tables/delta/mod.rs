@@ -118,12 +118,12 @@ impl DQDeltaTable {
             schema: Arc::new(Schema::empty()),
             files: HashMap::new(),
             stats: Vec::new(),
-            use_versioning: storage_options
-                .get("use_versioning")
-                .map_or(false, |v| v.parse().unwrap()),
-            max_stats_batches: storage_options
-                .get("max_stats_batches")
-                .map_or(32, |v| v.parse().unwrap()),
+            use_versioning: storage_options.get("use_versioning").map_or(false, |v| {
+                v.parse().expect("could not parse use_versioning")
+            }),
+            max_stats_batches: storage_options.get("max_stats_batches").map_or(32, |v| {
+                v.parse().expect("could not parse max_stats_batches")
+            }),
             timestamp_field: storage_options.get("timestamp_field").cloned(),
             timestamp_template: storage_options
                 .get("timestamp_template")
@@ -133,7 +133,7 @@ impl DQDeltaTable {
             timestamp_duration: storage_options
                 .get("timestamp_duration")
                 .map_or(Duration::hours(1), |v| {
-                    duration_str::parse_chrono(v).unwrap()
+                    duration_str::parse_chrono(v).expect("could not parse timestamp_duration")
                 }),
             filesystem_options,
         }
@@ -168,7 +168,7 @@ impl DQDeltaTable {
                 self.protocol = protocol.clone();
             } else if let Action::Metadata(metadata) = action {
                 self.metadata = metadata.clone();
-                self.schema = Arc::new(Schema::try_from(&metadata.schema().unwrap()).unwrap());
+                self.schema = Arc::new(Schema::try_from(&metadata.schema()?)?);
             }
         }
 
@@ -275,7 +275,7 @@ impl DQTable for DQDeltaTable {
                             let schema = batch0.schema();
                             let predicates = create_physical_expr(
                                 &expressions,
-                                &schema.clone().to_dfschema().unwrap(),
+                                &schema.clone().to_dfschema()?,
                                 &schema,
                                 &ExecutionProps::new(),
                             )?;
@@ -283,11 +283,11 @@ impl DQTable for DQDeltaTable {
                             for batch in self.stats.iter() {
                                 match predicates.evaluate(&batch) {
                                     Ok(results) => {
-                                        let results = results.into_array(batch.num_rows()).unwrap();
+                                        let results = results.into_array(batch.num_rows())?;
                                         let paths = as_string_array(
                                             batch
                                                 .column_by_name(statistics::STATS_TABLE_ADD_PATH)
-                                                .unwrap(),
+                                                .expect("could not get path column"),
                                         )?;
                                         for (result, path) in results.as_boolean().iter().zip(paths)
                                         {

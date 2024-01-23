@@ -54,7 +54,7 @@ impl DQCompute for DQDuckDBCompute {
                                     log::info!("files={:#?}, {}", files, files.len());
 
                                     if files.len() > 0 {
-                                        let engine = Connection::open_in_memory().unwrap();
+                                        let engine = Connection::open_in_memory()?;
                                         setup_duckdb(
                                             &engine,
                                             &self.compute_options,

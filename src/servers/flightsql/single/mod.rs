@@ -263,7 +263,7 @@ impl FlightSqlService for FlightSqlServiceSingle {
             }
         }
 
-        Err(Status::not_found("No table or batches"))
+        Err(Status::internal("invalid sql"))
     }
 
     async fn get_flight_info_substrait_plan(
@@ -641,7 +641,7 @@ impl FlightSqlService for FlightSqlServiceSingle {
             }
         }
 
-        Err(Status::not_found("No data"))
+        Err(Status::not_found("no data"))
     }
 
     async fn do_put_statement_update(
