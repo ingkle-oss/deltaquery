@@ -1,7 +1,7 @@
-use crate::compute::{DQCompute, DQComputeFactory};
+use crate::compute::{DQCompute, DQComputeError, DQComputeFactory};
 use crate::configs::DQComputeConfig;
 use crate::state::DQState;
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use arrow::array::RecordBatch;
 use async_trait::async_trait;
 use duckdb::{params, Connection};
@@ -80,6 +80,8 @@ impl DQCompute for DQDuckDBCompute {
                                             stmt.query_arrow([])?.collect::<Vec<RecordBatch>>(),
                                         );
                                     }
+                                } else {
+                                    return Err(anyhow!(DQComputeError::NoTable));
                                 }
                             }
                             _ => {}

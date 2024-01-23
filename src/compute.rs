@@ -10,6 +10,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+#[allow(missing_docs)]
+#[derive(thiserror::Error, Debug)]
+pub enum DQComputeError {
+    #[error("no table")]
+    NoTable,
+}
+
 static COMPUTE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQComputeFactory>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
