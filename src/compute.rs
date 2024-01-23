@@ -28,11 +28,7 @@ static COMPUTE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQComputeFactory>>>
 
 #[async_trait]
 pub trait DQCompute: Send + Sync {
-    async fn execute(
-        &mut self,
-        statement: &Statement,
-        state: Arc<Mutex<DQState>>,
-    ) -> Result<Vec<RecordBatch>, Error>;
+    async fn prepare(&self) -> Result<Box<dyn DQComputeSession>, Error>;
 
     fn get_function_return_type(
         &self,
@@ -42,6 +38,15 @@ pub trait DQCompute: Send + Sync {
     ) -> Option<DataType> {
         None
     }
+}
+
+#[async_trait]
+pub trait DQComputeSession: Send + Sync {
+    async fn execute(
+        &self,
+        statement: &Statement,
+        state: Arc<Mutex<DQState>>,
+    ) -> Result<Vec<RecordBatch>, Error>;
 }
 
 #[async_trait]

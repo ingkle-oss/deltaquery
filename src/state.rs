@@ -1,13 +1,18 @@
-use crate::compute::{create_compute_using_factory, DQCompute};
+use crate::compute::{create_compute_using_factory, DQCompute, DQComputeSession};
 use crate::configs::{DQConfig, DQTableConfig};
 use crate::table::{create_table_using_factory, DQTable};
+use anyhow::Error;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use std::collections::hash_map::IterMut;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub struct DQState {
     config: DQConfig,
+
+    compute: Option<Box<dyn DQCompute>>,
 
     tables: HashMap<String, Box<dyn DQTable>>,
 
@@ -31,15 +36,24 @@ impl DQState {
 
         DQState {
             config,
+            compute: None,
             tables: HashMap::new(),
             pool,
         }
     }
 
-    pub async fn get_compute(&self) -> Option<Box<dyn DQCompute>> {
-        let config = &self.config.compute;
+    pub async fn get_compute(&mut self) -> Option<&mut Box<dyn DQCompute>> {
+        if self.compute.is_none() {
+            let config = &self.config.compute;
 
-        create_compute_using_factory(&config.r#type, Some(config)).await
+            self.compute = create_compute_using_factory(&config.r#type, Some(config)).await;
+        }
+
+        if let Some(compute) = self.compute.as_mut() {
+            Some(compute)
+        } else {
+            None
+        }
     }
 
     pub async fn get_table(&mut self, target: &String) -> Option<&mut Box<dyn DQTable>> {
@@ -136,5 +150,18 @@ impl DQState {
                 Err(err) => panic!("could not query tables: {:?}", err),
             }
         }
+    }
+
+    pub async fn prepare_compute_session(
+        state: Arc<Mutex<DQState>>,
+    ) -> Result<Box<dyn DQComputeSession>, Error> {
+        let mut state = state.lock().await;
+
+        let compute = state
+            .get_compute()
+            .await
+            .expect("could not get compute engine");
+
+        compute.prepare().await
     }
 }

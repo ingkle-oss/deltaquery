@@ -231,15 +231,11 @@ impl FlightSqlService for FlightSqlServiceSingle {
         for statement in statements.iter() {
             log::info!("statement={:#?}", statement.to_string());
 
-            let mut compute = self
-                .state
-                .lock()
+            let session = DQState::prepare_compute_session(self.state.clone())
                 .await
-                .get_compute()
-                .await
-                .expect("could not get compute engine");
+                .map_err(to_tonic_error)?;
 
-            let batches = compute
+            let batches = session
                 .execute(statement, self.state.clone())
                 .await
                 .map_err(to_tonic_error)?;

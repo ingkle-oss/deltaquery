@@ -1,4 +1,4 @@
-use crate::compute::{DQCompute, DQComputeError, DQComputeFactory};
+use crate::compute::{DQCompute, DQComputeError, DQComputeFactory, DQComputeSession};
 use crate::configs::DQComputeConfig;
 use crate::state::DQState;
 use anyhow::{anyhow, Error};
@@ -26,8 +26,30 @@ impl DQDuckDBCompute {
 
 #[async_trait]
 impl DQCompute for DQDuckDBCompute {
+    async fn prepare(&self) -> Result<Box<dyn DQComputeSession>, Error> {
+        let session: Box<dyn DQComputeSession> =
+            Box::new(DQDuckDBComputeSession::new(&self.compute_options).await);
+
+        Ok(session)
+    }
+}
+
+pub struct DQDuckDBComputeSession {
+    compute_options: HashMap<String, String>,
+}
+
+impl DQDuckDBComputeSession {
+    pub async fn new(compute_options: &HashMap<String, String>) -> Self {
+        DQDuckDBComputeSession {
+            compute_options: compute_options.clone(),
+        }
+    }
+}
+
+#[async_trait]
+impl DQComputeSession for DQDuckDBComputeSession {
     async fn execute(
-        &mut self,
+        &self,
         statement: &Statement,
         state: Arc<Mutex<DQState>>,
     ) -> Result<Vec<RecordBatch>, Error> {
