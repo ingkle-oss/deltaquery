@@ -2,8 +2,6 @@ pub mod commons;
 pub mod compute;
 pub mod computes;
 pub mod configs;
-pub mod error;
-pub mod errors;
 pub mod servers;
 pub mod state;
 pub mod storage;

@@ -1,8 +1,9 @@
 use crate::commons::flight;
 use crate::commons::sql;
-use crate::error::DQError;
+use crate::commons::tonic::to_tonic_error;
 use crate::servers::flightsql::helpers::FetchResults;
 use crate::state::DQState;
+use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::datatypes::Schema;
 use arrow_flight::encode::FlightDataEncoderBuilder;
@@ -28,7 +29,7 @@ use arrow_flight::{
 use arrow_ipc::CompressionType;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use deltalake::datafusion::prelude::*;
+use datafusion::prelude::*;
 use futures::{stream, Stream, TryStreamExt};
 use once_cell::sync::Lazy;
 use prost::Message;
@@ -109,7 +110,7 @@ impl FlightSqlServiceSingle {
         items: &Vec<RecordBatch>,
         handle: String,
         location: String,
-    ) -> Result<Option<FlightInfo>, DQError> {
+    ) -> Result<Option<FlightInfo>, Error> {
         if let Some(item0) = items.first() {
             let schema = (*item0.schema()).clone();
             let num_rows: usize = items.iter().map(|b| b.num_rows()).sum();
@@ -136,7 +137,7 @@ impl FlightSqlServiceSingle {
         }
     }
 
-    fn check_token<T>(&self, request: &Request<T>) -> Result<(), DQError> {
+    fn check_token<T>(&self, request: &Request<T>) -> Result<(), Error> {
         if let Some(authorization) = request.metadata().get("authorization") {
             let authorization = authorization.to_str()?;
             if authorization.starts_with(BASIC_AUTHORIZATION_PREFIX) {
@@ -155,7 +156,7 @@ impl FlightSqlServiceSingle {
         Ok(())
     }
 
-    fn parse_sql(&self, sql: &String) -> Result<Vec<Statement>, DQError> {
+    fn parse_sql(&self, sql: &String) -> Result<Vec<Statement>, Error> {
         let dialect = GenericDialect {};
         let statements = Parser::parse_sql(&dialect, sql)?;
 
@@ -227,9 +228,9 @@ impl FlightSqlService for FlightSqlServiceSingle {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        self.check_token(&request)?;
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
 
-        let statements = self.parse_sql(&query.query)?;
+        let statements = self.parse_sql(&query.query).map_err(to_tonic_error)?;
         for statement in statements.iter() {
             log::info!("statement={:#?}", statement.to_string());
 
@@ -242,9 +243,9 @@ impl FlightSqlService for FlightSqlServiceSingle {
                             let mut state = self.state.lock().await;
 
                             if let Some(table) = state.get_table(&table).await {
-                                table.execute(statement).await?
+                                table.execute(statement).await.map_err(to_tonic_error)?
                             } else {
-                                vec![RecordBatch::new_empty(Arc::new(Schema::empty()))]
+                                return Err(Status::not_found("No table or batches"));
                             }
                         }
                         None => match statement {
@@ -628,7 +629,7 @@ impl FlightSqlService for FlightSqlServiceSingle {
         log::info!("request={:#?}", request);
         log::info!("message={:#?}", message);
 
-        self.check_token(&request)?;
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
 
         if let Some(fetch_results) = message.unpack::<FetchResults>().unwrap() {
             let mut handles = self.handles.lock().await;
@@ -640,7 +641,8 @@ impl FlightSqlService for FlightSqlServiceSingle {
                     let num_bytes: usize = batches.iter().map(|b| b.get_array_memory_size()).sum();
                     log::info!("schema={:#?}", schema);
                     let flight_data =
-                        flight::batches_to_flight_data(schema.as_ref(), batches, self.compression)?
+                        flight::batches_to_flight_data(schema.as_ref(), batches, self.compression)
+                            .map_err(|e| status!("Could not convert batches", e))?
                             .into_iter()
                             .map(Ok);
 

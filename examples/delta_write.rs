@@ -1,3 +1,4 @@
+use anyhow::Error;
 use arrow::array::Int64Array;
 use arrow::{
     array::{Int32Array, StringArray},
@@ -48,7 +49,7 @@ struct DSOption {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), deltalake::DeltaTableError> {
+async fn main() -> Result<(), Error> {
     let cmd = Command::new("DeltaTable");
     let cmd = DSOption::augment_args(cmd);
     let args = cmd.get_matches();

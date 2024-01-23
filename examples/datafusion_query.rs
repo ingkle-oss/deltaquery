@@ -1,7 +1,8 @@
+use anyhow::Error;
 use arrow_cast::pretty::pretty_format_batches;
 use clap::{Args, Command};
-use deltalake::datafusion::common::Result;
-use deltalake::datafusion::execution::context::SessionContext;
+use datafusion::common::Result;
+use datafusion::execution::context::SessionContext;
 use deltalake::delta_datafusion::{DeltaScanConfigBuilder, DeltaTableProvider};
 use std::collections::HashMap;
 use std::path::Path;
@@ -29,7 +30,7 @@ struct DSOption {
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), deltalake::DeltaTableError> {
+async fn main() -> Result<(), Error> {
     let cmd = Command::new("DatafusionQuery");
     let cmd = DSOption::augment_args(cmd);
     let args = cmd.get_matches();

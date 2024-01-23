@@ -1,5 +1,5 @@
 use crate::configs::{DQComputeConfig, DQFilesystemConfig, DQTableConfig};
-use crate::error::DQError;
+use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{DataType, SchemaRef};
 use async_trait::async_trait;
@@ -18,7 +18,7 @@ pub trait DQCompute: Send + Sync {
         statement: &Statement,
         schema: Option<SchemaRef>,
         files: Vec<String>,
-    ) -> Result<Vec<RecordBatch>, DQError>;
+    ) -> Result<Vec<RecordBatch>, Error>;
 
     fn get_function_return_type(
         &self,

@@ -1,7 +1,7 @@
 use crate::commons::sql;
 use crate::compute::{DQCompute, DQComputeFactory};
 use crate::configs::{DQComputeConfig, DQFilesystemConfig, DQTableConfig};
-use crate::error::DQError;
+use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
@@ -43,7 +43,7 @@ impl DQCompute for DQDuckDBCompute {
         statement: &Statement,
         _schema: Option<SchemaRef>,
         files: Vec<String>,
-    ) -> Result<Vec<RecordBatch>, DQError> {
+    ) -> Result<Vec<RecordBatch>, Error> {
         let mut batches = Vec::new();
 
         if let Some(from) = sql::get_table(statement) {
@@ -95,7 +95,7 @@ fn setup_duckdb(
     engine: &Connection,
     compute_options: &HashMap<String, String>,
     filesystem_options: &HashMap<String, String>,
-) -> Result<(), DQError> {
+) -> Result<(), Error> {
     engine.execute("PRAGMA enable_object_cache", params![])?;
 
     if let Some(memory_limit) = compute_options.get("memory_limit") {

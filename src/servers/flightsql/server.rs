@@ -1,13 +1,11 @@
 use crate::configs::DQConfig;
+use anyhow::Error;
 use arrow_flight::flight_service_server::FlightServiceServer;
 use arrow_flight::sql::server::FlightSqlService;
 use tonic::transport::Server;
 use tonic::transport::{Certificate, Identity, ServerTlsConfig};
 
-pub async fn serve(
-    config: DQConfig,
-    service: impl FlightSqlService,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn serve(config: DQConfig, service: impl FlightSqlService) -> Result<(), Error> {
     let mut server = if let Some(tls_config) = config.tls.as_ref() {
         let server_cert = std::fs::read_to_string(tls_config.server_cert.clone())?;
         let server_key = std::fs::read_to_string(tls_config.server_key.clone())?;

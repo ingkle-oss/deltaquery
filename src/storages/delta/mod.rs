@@ -1,16 +1,16 @@
 use crate::commons::delta;
 use crate::configs::{DQFilesystemConfig, DQStorageConfig, DQTableConfig};
-use crate::error::DQError;
 use crate::storage::{DQStorage, DQStorageFactory};
+use anyhow::Error;
 use arrow::array::cast::AsArray;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
 use chrono::Duration;
-use deltalake::datafusion::common::cast::as_string_array;
-use deltalake::datafusion::common::ToDFSchema;
-use deltalake::datafusion::physical_expr::create_physical_expr;
-use deltalake::datafusion::physical_expr::execution_props::ExecutionProps;
+use datafusion::common::cast::as_string_array;
+use datafusion::common::ToDFSchema;
+use datafusion::physical_expr::create_physical_expr;
+use datafusion::physical_expr::execution_props::ExecutionProps;
 use deltalake::kernel::{Action, Add, Metadata, Protocol};
 use deltalake::logstore::logstore_for;
 use deltalake::logstore::LogStoreRef;
@@ -140,7 +140,7 @@ impl DQDeltaStorage {
         self
     }
 
-    fn update_actions(&mut self, actions: &Vec<Action>, version: i64) -> Result<(), DQError> {
+    fn update_actions(&mut self, actions: &Vec<Action>, version: i64) -> Result<(), Error> {
         for action in actions {
             if let Action::Add(add) = action {
                 self.files.insert(
@@ -171,7 +171,7 @@ impl DQDeltaStorage {
         Ok(())
     }
 
-    fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), DQError> {
+    fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), Error> {
         let batch = statistics::get_record_batch_from_actions(
             &actions,
             &self.schema,
@@ -192,7 +192,7 @@ impl DQDeltaStorage {
         Ok(())
     }
 
-    async fn update_commits(&mut self) -> Result<(), DQError> {
+    async fn update_commits(&mut self) -> Result<(), Error> {
         let mut actions = Vec::new();
 
         let mut version = self.version;
@@ -227,7 +227,7 @@ impl DQDeltaStorage {
 
 #[async_trait]
 impl DQStorage for DQDeltaStorage {
-    async fn update(&mut self) -> Result<(), DQError> {
+    async fn update(&mut self) -> Result<(), Error> {
         if self.version >= 0 {
             self.update_commits().await?;
         } else {
@@ -251,7 +251,7 @@ impl DQStorage for DQDeltaStorage {
         Ok(())
     }
 
-    async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, DQError> {
+    async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, Error> {
         let mut files: Vec<&DQDeltaFile> = Vec::new();
 
         match statement {
@@ -322,7 +322,7 @@ impl DQStorage for DQDeltaStorage {
             .collect())
     }
 
-    async fn insert(&mut self, _statement: &Statement) -> Result<(), DQError> {
+    async fn insert(&mut self, _statement: &Statement) -> Result<(), Error> {
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 use arrow::datatypes::{DataType, Fields, TimeUnit};
-use deltalake::datafusion::common::scalar::ScalarValue;
-use deltalake::datafusion::common::Column;
-use deltalake::datafusion::logical_expr::{Cast, Expr};
+use datafusion::common::scalar::ScalarValue;
+use datafusion::common::Column;
+use datafusion::logical_expr::{Cast, Expr};
 
 pub fn parse_expression(
     predicates: &sqlparser::ast::Expr,

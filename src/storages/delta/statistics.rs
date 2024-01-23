@@ -1,10 +1,10 @@
-use crate::error::DQError;
+use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::compute::{cast_with_options, CastOptions};
 use arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit};
 use chrono::{DateTime, Duration};
-use deltalake::datafusion::common::scalar::ScalarValue;
-use deltalake::datafusion::common::DataFusionError;
+use datafusion::common::scalar::ScalarValue;
+use datafusion::common::DataFusionError;
 use deltalake::kernel::Action;
 use deltalake::DeltaTableError;
 use serde_json::Value;
@@ -97,7 +97,7 @@ fn get_scalar_value_for_timestamp(
 fn get_scalar_value(
     value: &serde_json::Value,
     datatype: &DataType,
-) -> Result<Option<ScalarValue>, DQError> {
+) -> Result<Option<ScalarValue>, Error> {
     match value {
         serde_json::Value::Array(_) => Ok(None),
         serde_json::Value::Object(_) => Ok(None),
@@ -126,7 +126,7 @@ pub fn get_record_batch_from_actions(
     timestamp_field: Option<&String>,
     timestamp_template: &String,
     timestamp_duration: &Duration,
-) -> Result<RecordBatch, DQError> {
+) -> Result<RecordBatch, Error> {
     let fields0 = match predicates {
         Some(predicates) => schema
             .fields()

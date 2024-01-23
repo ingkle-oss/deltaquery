@@ -1,6 +1,6 @@
 use crate::compute::DQCompute;
-use crate::error::DQError;
 use crate::storage::DQStorage;
+use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use sqlparser::ast::{SetExpr, Statement};
@@ -21,13 +21,13 @@ impl DQTable {
         self.storage.schema()
     }
 
-    pub async fn update(&mut self) -> Result<(), DQError> {
+    pub async fn update(&mut self) -> Result<(), Error> {
         self.storage.update().await?;
 
         Ok(())
     }
 
-    pub async fn execute(&mut self, statement: &Statement) -> Result<Vec<RecordBatch>, DQError> {
+    pub async fn execute(&mut self, statement: &Statement) -> Result<Vec<RecordBatch>, Error> {
         match statement {
             Statement::Query(query) => {
                 if let SetExpr::Select(_) = query.body.as_ref() {

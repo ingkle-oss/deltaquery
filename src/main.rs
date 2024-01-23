@@ -1,3 +1,4 @@
+use anyhow::Error;
 use clap::{Args, Command};
 use deltaquery::compute::register_compute_factory;
 use deltaquery::computes::duckdb::DQDuckDBComputeFactory;
@@ -55,7 +56,7 @@ fn handle_state(state: Arc<Mutex<DQState>>) {
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Error> {
     let cmd = Command::new("DeltaQuery");
     let cmd = DQOption::augment_args(cmd);
     let args = cmd.get_matches();

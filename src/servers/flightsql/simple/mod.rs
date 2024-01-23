@@ -1,7 +1,8 @@
 use crate::commons::flight;
-use crate::error::DQError;
+use crate::commons::tonic::to_tonic_error;
 use crate::servers::flightsql::helpers::FetchResults;
 use crate::state::DQState;
+use anyhow::Error;
 use arrow::array::builder::StringBuilder;
 use arrow::array::{ArrayRef, RecordBatch};
 use arrow_flight::encode::FlightDataEncoderBuilder;
@@ -94,7 +95,7 @@ impl FlightSqlServiceSimple {
         FlightSqlServiceSimple {}
     }
 
-    fn check_token<T>(&self, request: &Request<T>) -> Result<(), DQError> {
+    fn check_token<T>(&self, request: &Request<T>) -> Result<(), Error> {
         let basic = "Basic ";
         let authorization = request.metadata().get("authorization").unwrap().to_str()?;
         if !authorization.starts_with(basic) {}
@@ -110,7 +111,7 @@ impl FlightSqlServiceSimple {
         Ok(())
     }
 
-    fn get_dummy_batch() -> Result<RecordBatch, DQError> {
+    fn get_dummy_batch() -> Result<RecordBatch, Error> {
         let schema = Schema::new(vec![Field::new("salutation", DataType::Utf8, false)]);
         let mut builder = StringBuilder::new();
         builder.append_value("Hello, FlightSQL!");
@@ -182,8 +183,8 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        self.check_token(&request)?;
-        let batch = Self::get_dummy_batch()?;
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
+        let batch = Self::get_dummy_batch().map_err(to_tonic_error)?;
         let schema = (*batch.schema()).clone();
         let num_rows = batch.num_rows();
         let num_bytes = batch.get_array_memory_size();
@@ -237,10 +238,10 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("cmd={:#?}", cmd);
         log::info!("request={:#?}", request);
 
-        self.check_token(&request)?;
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
         let handle = std::str::from_utf8(&cmd.prepared_statement_handle)
             .map_err(|e| status!("Unable to parse handle", e))?;
-        let batch = Self::get_dummy_batch()?;
+        let batch = Self::get_dummy_batch().map_err(to_tonic_error)?;
         let schema = (*batch.schema()).clone();
         let num_rows = batch.num_rows();
         let num_bytes = batch.get_array_memory_size();
@@ -699,8 +700,8 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("request={:#?}", request);
         log::info!("message={:#?}", message);
 
-        self.check_token(&request)?;
-        let batch = Self::get_dummy_batch()?;
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
+        let batch = Self::get_dummy_batch().map_err(to_tonic_error)?;
         let schema = batch.schema();
         let batches = vec![batch];
         let flight_data =
@@ -777,8 +778,8 @@ impl FlightSqlService for FlightSqlServiceSimple {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        self.check_token(&request)?;
-        let schema = Self::get_dummy_batch()?.schema();
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
+        let schema = Self::get_dummy_batch().map_err(to_tonic_error)?.schema();
         let message = SchemaAsIpc::new(&schema, &IpcWriteOptions::default())
             .try_into()
             .map_err(|e| status!("Unable to serialize schema", e))?;
