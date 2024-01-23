@@ -1,4 +1,6 @@
+use anyhow::Error;
 use arrow_flight::sql::{Any, ProstMessageExt};
+use tonic::Status;
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FetchResults {
@@ -17,4 +19,8 @@ impl ProstMessageExt for FetchResults {
             value: ::prost::Message::encode_to_vec(self).into(),
         }
     }
+}
+
+pub fn to_tonic_error(err: Error) -> Status {
+    Status::internal(format!("{err:?}"))
 }

@@ -1,6 +1,5 @@
 use crate::commons::flight;
-use crate::commons::tonic::to_tonic_error;
-use crate::servers::flightsql::helpers::FetchResults;
+use crate::servers::flightsql::helpers::{to_tonic_error, FetchResults};
 use crate::state::DQState;
 use anyhow::Error;
 use arrow::array::builder::StringBuilder;
