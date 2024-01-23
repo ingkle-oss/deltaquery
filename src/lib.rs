@@ -4,6 +4,5 @@ pub mod computes;
 pub mod configs;
 pub mod servers;
 pub mod state;
-pub mod storage;
-pub mod storages;
 pub mod table;
+pub mod tables;

@@ -6,8 +6,8 @@ use deltaquery::configs::DQConfig;
 use deltaquery::servers::flightsql;
 use deltaquery::servers::flightsql::{FlightSqlServiceSimple, FlightSqlServiceSingle};
 use deltaquery::state::DQState;
-use deltaquery::storage::register_storage_factory;
-use deltaquery::storages::delta::DQDeltaStorageFactory;
+use deltaquery::table::register_table_factory;
+use deltaquery::tables::delta::DQDeltaTableFactory;
 use env_logger::Builder;
 use std::env;
 use std::fs::File;
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Error> {
         None => serde_yaml::Value::default(),
     };
 
-    register_storage_factory("delta", Box::new(DQDeltaStorageFactory::new())).await;
+    register_table_factory("delta", Box::new(DQDeltaTableFactory::new())).await;
     register_compute_factory("duckdb", Box::new(DQDuckDBComputeFactory::new())).await;
 
     let state = Arc::new(Mutex::new(DQState::new(config.clone()).await));

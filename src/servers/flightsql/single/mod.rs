@@ -1,11 +1,9 @@
 use crate::commons::flight;
-use crate::commons::sql;
 use crate::commons::tonic::to_tonic_error;
 use crate::servers::flightsql::helpers::FetchResults;
 use crate::state::DQState;
 use anyhow::Error;
 use arrow::array::RecordBatch;
-use arrow::datatypes::Schema;
 use arrow_flight::encode::FlightDataEncoderBuilder;
 use arrow_flight::sql::metadata::{SqlInfoData, SqlInfoDataBuilder};
 use arrow_flight::sql::server::PeekableFlightDataStream;
@@ -29,12 +27,11 @@ use arrow_flight::{
 use arrow_ipc::CompressionType;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use datafusion::prelude::*;
 use futures::{stream, Stream, TryStreamExt};
 use once_cell::sync::Lazy;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sqlparser::ast::{SetExpr, Statement};
+use sqlparser::ast::Statement;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::collections::HashMap;
@@ -238,30 +235,18 @@ impl FlightSqlService for FlightSqlServiceSingle {
                 Statement::Query(_) => {
                     let handle: String = Uuid::new_v4().to_string();
 
-                    let batches = match sql::get_table(statement) {
-                        Some(table) => {
-                            let mut state = self.state.lock().await;
+                    let mut compute = self
+                        .state
+                        .lock()
+                        .await
+                        .get_compute()
+                        .await
+                        .expect("could not get compute engine");
 
-                            if let Some(table) = state.get_table(&table).await {
-                                table.execute(statement).await.map_err(to_tonic_error)?
-                            } else {
-                                return Err(Status::not_found("No table or batches"));
-                            }
-                        }
-                        None => match statement {
-                            Statement::Query(query) => {
-                                if let SetExpr::Select(_) = query.body.as_ref() {
-                                    let ctx = SessionContext::new();
-                                    let df = ctx.sql(&statement.to_string()).await.unwrap();
-
-                                    df.collect().await.unwrap()
-                                } else {
-                                    vec![RecordBatch::new_empty(Arc::new(Schema::empty()))]
-                                }
-                            }
-                            _ => vec![RecordBatch::new_empty(Arc::new(Schema::empty()))],
-                        },
-                    };
+                    let batches = compute
+                        .execute(statement, self.state.clone())
+                        .await
+                        .map_err(to_tonic_error)?;
 
                     if let Ok(Some(flight_info)) =
                         self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())

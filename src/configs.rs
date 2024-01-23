@@ -13,7 +13,6 @@ pub struct DQStorageConfig {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQComputeConfig {
-    pub name: String,
     pub r#type: String,
 
     #[serde(default)]
@@ -33,11 +32,9 @@ pub struct DQFilesystemConfig {
 pub struct DQTableConfig {
     pub name: String,
     pub storage: Option<String>,
-    pub compute: Option<String>,
     pub filesystem: Option<String>,
     pub location: Option<String>,
     pub predicates: Option<String>,
-    pub use_versioning: Option<bool>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -63,11 +60,10 @@ pub struct DQConfig {
     pub metastore: Option<DQMetastoreConfig>,
     pub tls: Option<DQTlsConfig>,
 
-    #[serde(default)]
-    pub storages: Vec<DQStorageConfig>,
+    pub compute: DQComputeConfig,
 
     #[serde(default)]
-    pub computes: Vec<DQComputeConfig>,
+    pub storages: Vec<DQStorageConfig>,
 
     #[serde(default)]
     pub filesystems: Vec<DQFilesystemConfig>,

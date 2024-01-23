@@ -1,6 +1,6 @@
 use crate::commons::delta;
 use crate::configs::{DQFilesystemConfig, DQStorageConfig, DQTableConfig};
-use crate::storage::{DQStorage, DQStorageFactory};
+use crate::table::{DQTable, DQTableFactory};
 use anyhow::Error;
 use arrow::array::cast::AsArray;
 use arrow::array::RecordBatch;
@@ -35,7 +35,7 @@ struct DQDeltaFile {
     rank: usize,
 }
 
-pub struct DQDeltaStorage {
+pub struct DQDeltaTable {
     store: LogStoreRef,
 
     location: String,
@@ -44,21 +44,22 @@ pub struct DQDeltaStorage {
     version: i64,
     schema: SchemaRef,
 
-    use_versioning: bool,
-
     protocol: Protocol,
     metadata: Metadata,
     files: HashMap<String, DQDeltaFile>,
 
     stats: Vec<RecordBatch>,
     max_stats_batches: usize,
+    use_versioning: bool,
 
     timestamp_field: Option<String>,
     timestamp_template: String,
     timestamp_duration: Duration,
+
+    filesystem_options: HashMap<String, String>,
 }
 
-impl DQDeltaStorage {
+impl DQDeltaTable {
     pub async fn new(
         table_config: &DQTableConfig,
         storage_config: Option<&DQStorageConfig>,
@@ -83,7 +84,7 @@ impl DQDeltaStorage {
         };
         let store = logstore_for(
             ensure_table_uri(url.as_str()).expect("could not parse table location"),
-            filesystem_options,
+            filesystem_options.clone(),
         )
         .expect("could not get object store for table");
 
@@ -107,17 +108,19 @@ impl DQDeltaStorage {
             None => None,
         };
 
-        DQDeltaStorage {
+        DQDeltaTable {
             store,
             location,
             version: -1,
             predicates: predicates,
-            use_versioning: table_config.use_versioning.unwrap_or(false),
             protocol: Protocol::default(),
             metadata: Metadata::default(),
             schema: Arc::new(Schema::empty()),
             files: HashMap::new(),
             stats: Vec::new(),
+            use_versioning: storage_options
+                .get("use_versioning")
+                .map_or(false, |v| v.parse().unwrap()),
             max_stats_batches: storage_options
                 .get("max_stats_batches")
                 .map_or(32, |v| v.parse().unwrap()),
@@ -132,6 +135,7 @@ impl DQDeltaStorage {
                 .map_or(Duration::hours(1), |v| {
                     duration_str::parse_chrono(v).unwrap()
                 }),
+            filesystem_options,
         }
     }
 
@@ -226,7 +230,7 @@ impl DQDeltaStorage {
 }
 
 #[async_trait]
-impl DQStorage for DQDeltaStorage {
+impl DQTable for DQDeltaTable {
     async fn update(&mut self) -> Result<(), Error> {
         if self.version >= 0 {
             self.update_commits().await?;
@@ -329,27 +333,31 @@ impl DQStorage for DQDeltaStorage {
     fn schema(&self) -> Option<SchemaRef> {
         Some(self.schema.clone())
     }
+
+    fn filesystem_options(&self) -> &HashMap<String, String> {
+        &self.filesystem_options
+    }
 }
 
-pub struct DQDeltaStorageFactory {}
+pub struct DQDeltaTableFactory {}
 
-impl DQDeltaStorageFactory {
+impl DQDeltaTableFactory {
     pub fn new() -> Self {
         deltalake::aws::register_handlers(None);
 
-        DQDeltaStorageFactory {}
+        DQDeltaTableFactory {}
     }
 }
 
 #[async_trait]
-impl DQStorageFactory for DQDeltaStorageFactory {
+impl DQTableFactory for DQDeltaTableFactory {
     async fn create(
         &self,
         table_config: &DQTableConfig,
         storage_config: Option<&DQStorageConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
-    ) -> Box<dyn DQStorage> {
-        Box::new(DQDeltaStorage::new(table_config, storage_config, filesystem_config).await)
+    ) -> Box<dyn DQTable> {
+        Box::new(DQDeltaTable::new(table_config, storage_config, filesystem_config).await)
     }
 }
 
@@ -357,8 +365,8 @@ impl DQStorageFactory for DQDeltaStorageFactory {
 mod tests {
     use crate::commons::tests;
     use crate::configs::DQTableConfig;
-    use crate::storage::DQStorage;
-    use crate::storages::delta::DQDeltaStorage;
+    use crate::table::DQTable;
+    use crate::tables::delta::DQDeltaTable;
     use deltalake::logstore::default_logstore;
     use deltalake::ObjectStore;
     use object_store::memory::InMemory;
@@ -400,14 +408,12 @@ mod tests {
         let table_config = DQTableConfig {
             name: "test0".into(),
             storage: None,
-            compute: None,
             filesystem: None,
             location: None,
             predicates: None,
-            use_versioning: None,
         };
 
-        let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
+        let mut storage = DQDeltaTable::new(&table_config, None, None).await;
         storage = storage.with_store(log_store.clone());
         storage.update().await.unwrap();
 
@@ -443,13 +449,11 @@ mod tests {
         let table_config = DQTableConfig {
             name: "test0".into(),
             storage: None,
-            compute: None,
             filesystem: None,
             location: None,
             predicates: None,
-            use_versioning: None,
         };
-        let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
+        let mut storage = DQDeltaTable::new(&table_config, None, None).await;
         storage = storage.with_store(log_store.clone());
 
         let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));
