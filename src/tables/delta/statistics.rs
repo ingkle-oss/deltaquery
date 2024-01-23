@@ -167,7 +167,7 @@ pub fn get_record_batch_from_actions(
     for action in actions {
         if let Action::Add(add) = action {
             let partitions = &add.partition_values;
-            let stats = add.get_stats()?;
+            let stats = add.get_stats_parsed()?;
             for field in &fields0 {
                 let data_type = field.data_type();
 

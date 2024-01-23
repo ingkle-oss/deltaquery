@@ -2,7 +2,6 @@ use deltalake::kernel::{
     Action, Add, DataType, Metadata, PrimitiveType, Protocol, Remove, StructField, StructType,
 };
 use deltalake::operations::transaction::{TransactionError, PROTOCOL};
-use deltalake::table::DeltaTableMetaData;
 use std::collections::HashMap;
 
 pub fn create_add_action(
@@ -17,7 +16,6 @@ pub fn create_add_action(
         stats,
         modification_time: -1,
         partition_values: Default::default(),
-        partition_values_parsed: None,
         stats_parsed: None,
         base_row_id: None,
         default_row_commit_version: None,
@@ -61,15 +59,14 @@ pub fn create_metadata_action(
         DataType::Primitive(PrimitiveType::Integer),
         true,
     )]);
-    let metadata = DeltaTableMetaData::new(
-        None,
-        None,
-        None,
-        table_schema,
-        parttiton_columns.unwrap_or_default(),
-        configuration.unwrap_or_default(),
-    );
-    Action::Metadata(Metadata::try_from(metadata).unwrap())
+    Action::Metadata(
+        Metadata::try_new(
+            table_schema,
+            parttiton_columns.unwrap_or_default(),
+            configuration.unwrap_or_default(),
+        )
+        .unwrap(),
+    )
 }
 
 fn log_entry_from_actions<'a>(
