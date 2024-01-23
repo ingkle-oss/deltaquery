@@ -1,73 +1,97 @@
-use crate::commons::sql;
-use crate::compute::{DQCompute, DQComputeFactory};
-use crate::configs::{DQComputeConfig, DQFilesystemConfig, DQTableConfig};
-use crate::error::DQError;
+use crate::compute::{DQCompute, DQComputeError, DQComputeFactory};
+use crate::configs::DQComputeConfig;
+use crate::state::DQState;
+use anyhow::{anyhow, Error};
 use arrow::array::RecordBatch;
-use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use duckdb::{params, Connection};
-use sqlparser::ast::Statement;
+use sqlparser::ast::{SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use url::Url;
 
 pub struct DQDuckDBCompute {
-    engine: Arc<Mutex<Connection>>,
+    compute_options: HashMap<String, String>,
 }
 
 impl DQDuckDBCompute {
-    pub async fn new(
-        _table_config: &DQTableConfig,
-        compute_config: Option<&DQComputeConfig>,
-        filesystem_config: Option<&DQFilesystemConfig>,
-    ) -> Self {
+    pub async fn new(compute_config: Option<&DQComputeConfig>) -> Self {
         let compute_options =
             compute_config.map_or(HashMap::new(), |config| config.options.clone());
-        let filesystem_options =
-            filesystem_config.map_or(HashMap::new(), |config| config.options.clone());
 
-        let engine = Connection::open_in_memory().unwrap();
-        setup_duckdb(&engine, &compute_options, &filesystem_options).unwrap();
-
-        DQDuckDBCompute {
-            engine: Arc::new(Mutex::new(engine)),
-        }
+        DQDuckDBCompute { compute_options }
     }
 }
 
 #[async_trait]
 impl DQCompute for DQDuckDBCompute {
-    async fn select(
+    async fn execute(
         &mut self,
         statement: &Statement,
-        _schema: Option<SchemaRef>,
-        files: Vec<String>,
-    ) -> Result<Vec<RecordBatch>, DQError> {
-        let mut batches = Vec::new();
+        state: Arc<Mutex<DQState>>,
+    ) -> Result<Vec<RecordBatch>, Error> {
+        match statement {
+            Statement::Query(query) => {
+                if let SetExpr::Select(select) = query.body.as_ref() {
+                    for table in &select.from {
+                        match &table.relation {
+                            TableFactor::Table { name, .. } => {
+                                let target = name
+                                    .0
+                                    .iter()
+                                    .map(|o| o.value.clone())
+                                    .collect::<Vec<String>>();
+                                let target = target.join(".");
 
-        if let Some(from) = sql::get_table(statement) {
-            log::info!("files={:#?}, {}", files, files.len());
+                                let mut state = state.lock().await;
 
-            if files.len() > 0 {
-                let engine = self.engine.lock().await;
+                                if let Some(table) = state.get_table(&target).await {
+                                    let files = table.select(statement).await?;
 
-                let files = files
-                    .iter()
-                    .map(|file| format!("'{}'", file))
-                    .collect::<Vec<String>>()
-                    .join(",");
+                                    log::info!("files={:#?}, {}", files, files.len());
 
-                let mut stmt = engine.prepare(&statement.to_string().replace(
-                    &from,
-                    &format!("read_parquet([{}], union_by_name=true)", files),
-                ))?;
+                                    if files.len() > 0 {
+                                        let engine = Connection::open_in_memory()?;
+                                        setup_duckdb(
+                                            &engine,
+                                            &self.compute_options,
+                                            table.filesystem_options(),
+                                        )?;
 
-                batches.extend(stmt.query_arrow([])?.collect::<Vec<RecordBatch>>());
+                                        let files = files
+                                            .iter()
+                                            .map(|file| format!("'{}'", file))
+                                            .collect::<Vec<String>>()
+                                            .join(",");
+
+                                        let mut stmt =
+                                            engine.prepare(&statement.to_string().replace(
+                                                &target,
+                                                &format!(
+                                                    "read_parquet([{}], union_by_name=true)",
+                                                    files
+                                                ),
+                                            ))?;
+
+                                        let batches =
+                                            stmt.query_arrow([])?.collect::<Vec<RecordBatch>>();
+
+                                        return Ok(batches);
+                                    }
+                                } else {
+                                    return Err(anyhow!(DQComputeError::NoTable));
+                                }
+                            }
+                            _ => return Err(anyhow!(DQComputeError::NotSupportedYet)),
+                        }
+                    }
+                }
             }
+            _ => return Err(anyhow!(DQComputeError::NotSupportedYet)),
         }
 
-        Ok(batches)
+        Err(anyhow!(DQComputeError::InvalidSql))
     }
 }
 
@@ -81,13 +105,8 @@ impl DQDuckDBComputeFactory {
 
 #[async_trait]
 impl DQComputeFactory for DQDuckDBComputeFactory {
-    async fn create(
-        &self,
-        table_config: &DQTableConfig,
-        compute_config: Option<&DQComputeConfig>,
-        filesystem_config: Option<&DQFilesystemConfig>,
-    ) -> Box<dyn DQCompute> {
-        Box::new(DQDuckDBCompute::new(table_config, compute_config, filesystem_config).await)
+    async fn create(&self, compute_config: Option<&DQComputeConfig>) -> Box<dyn DQCompute> {
+        Box::new(DQDuckDBCompute::new(compute_config).await)
     }
 }
 
@@ -95,7 +114,7 @@ fn setup_duckdb(
     engine: &Connection,
     compute_options: &HashMap<String, String>,
     filesystem_options: &HashMap<String, String>,
-) -> Result<(), DQError> {
+) -> Result<(), Error> {
     engine.execute("PRAGMA enable_object_cache", params![])?;
 
     if let Some(memory_limit) = compute_options.get("memory_limit") {

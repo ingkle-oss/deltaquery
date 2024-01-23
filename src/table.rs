@@ -1,66 +1,55 @@
-use crate::compute::DQCompute;
-use crate::error::DQError;
-use crate::storage::DQStorage;
-use arrow::array::RecordBatch;
-use arrow::datatypes::{Schema, SchemaRef};
-use sqlparser::ast::{SetExpr, Statement};
-use std::sync::Arc;
-use std::time::Instant;
+use crate::configs::{DQFilesystemConfig, DQStorageConfig, DQTableConfig};
+use anyhow::Error;
+use arrow::datatypes::SchemaRef;
+use async_trait::async_trait;
+use once_cell::sync::Lazy;
+use sqlparser::ast::Statement;
+use std::collections::HashMap;
+use tokio::sync::Mutex;
 
-pub struct DQTable {
-    pub storage: Box<dyn DQStorage>,
-    pub compute: Box<dyn DQCompute>,
+static TABLE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQTableFactory>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+#[async_trait]
+pub trait DQTable: Send + Sync {
+    async fn update(&mut self) -> Result<(), Error>;
+    async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, Error>;
+    async fn insert(&mut self, statement: &Statement) -> Result<(), Error>;
+
+    fn schema(&self) -> Option<SchemaRef>;
+
+    fn partition_columns(&self) -> Option<&Vec<String>>;
+    fn filesystem_options(&self) -> &HashMap<String, String>;
 }
 
-impl DQTable {
-    pub fn new(storage: Box<dyn DQStorage>, compute: Box<dyn DQCompute>) -> Self {
-        DQTable { storage, compute }
-    }
+#[async_trait]
+pub trait DQTableFactory: Send + Sync {
+    async fn create(
+        &self,
+        table_config: &DQTableConfig,
+        storage_config: Option<&DQStorageConfig>,
+        filesystem_config: Option<&DQFilesystemConfig>,
+    ) -> Box<dyn DQTable>;
+}
 
-    pub fn schema(&self) -> Option<SchemaRef> {
-        self.storage.schema()
-    }
+pub async fn register_table_factory(name: &str, factory: Box<dyn DQTableFactory>) {
+    let mut factories = TABLE_FACTORIES.lock().await;
+    factories.insert(name.to_string(), factory);
+}
 
-    pub async fn update(&mut self) -> Result<(), DQError> {
-        self.storage.update().await?;
-
-        Ok(())
-    }
-
-    pub async fn execute(&mut self, statement: &Statement) -> Result<Vec<RecordBatch>, DQError> {
-        match statement {
-            Statement::Query(query) => {
-                if let SetExpr::Select(_) = query.body.as_ref() {
-                    let time0 = Instant::now();
-
-                    let files = self.storage.select(statement).await?;
-
-                    log::info!(
-                        "fetched files for {} milliseconds",
-                        time0.elapsed().as_millis()
-                    );
-
-                    let schema = self.storage.schema();
-                    let batches = self.compute.select(statement, schema, files).await?;
-
-                    log::info!(
-                        "executed queries for {} milliseconds",
-                        time0.elapsed().as_millis()
-                    );
-
-                    Ok(batches)
-                } else {
-                    unimplemented!()
-                }
-            }
-            Statement::Insert { .. } => {
-                self.storage.insert(statement).await?;
-
-                let batches = vec![RecordBatch::new_empty(Arc::new(Schema::empty()))];
-
-                Ok(batches)
-            }
-            _ => unimplemented!(),
-        }
+pub async fn create_table_using_factory(
+    name: &str,
+    table_config: &DQTableConfig,
+    storage_config: Option<&DQStorageConfig>,
+    filesystem_config: Option<&DQFilesystemConfig>,
+) -> Option<Box<dyn DQTable>> {
+    let factories = TABLE_FACTORIES.lock().await;
+    if let Some(factory) = factories.get(name) {
+        let table: Box<dyn DQTable> = factory
+            .create(table_config, storage_config, filesystem_config)
+            .await;
+        Some(table)
+    } else {
+        None
     }
 }

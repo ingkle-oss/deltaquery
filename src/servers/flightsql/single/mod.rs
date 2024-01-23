@@ -1,10 +1,9 @@
 use crate::commons::flight;
-use crate::commons::sql;
-use crate::error::DQError;
+use crate::commons::tonic::to_tonic_error;
 use crate::servers::flightsql::helpers::FetchResults;
 use crate::state::DQState;
+use anyhow::Error;
 use arrow::array::RecordBatch;
-use arrow::datatypes::Schema;
 use arrow_flight::encode::FlightDataEncoderBuilder;
 use arrow_flight::sql::metadata::{SqlInfoData, SqlInfoDataBuilder};
 use arrow_flight::sql::server::PeekableFlightDataStream;
@@ -28,12 +27,11 @@ use arrow_flight::{
 use arrow_ipc::CompressionType;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use deltalake::datafusion::prelude::*;
 use futures::{stream, Stream, TryStreamExt};
 use once_cell::sync::Lazy;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sqlparser::ast::{SetExpr, Statement};
+use sqlparser::ast::Statement;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::collections::HashMap;
@@ -109,7 +107,7 @@ impl FlightSqlServiceSingle {
         items: &Vec<RecordBatch>,
         handle: String,
         location: String,
-    ) -> Result<Option<FlightInfo>, DQError> {
+    ) -> Result<Option<FlightInfo>, Error> {
         if let Some(item0) = items.first() {
             let schema = (*item0.schema()).clone();
             let num_rows: usize = items.iter().map(|b| b.num_rows()).sum();
@@ -136,7 +134,7 @@ impl FlightSqlServiceSingle {
         }
     }
 
-    fn check_token<T>(&self, request: &Request<T>) -> Result<(), DQError> {
+    fn check_token<T>(&self, request: &Request<T>) -> Result<(), Error> {
         if let Some(authorization) = request.metadata().get("authorization") {
             let authorization = authorization.to_str()?;
             if authorization.starts_with(BASIC_AUTHORIZATION_PREFIX) {
@@ -155,7 +153,7 @@ impl FlightSqlServiceSingle {
         Ok(())
     }
 
-    fn parse_sql(&self, sql: &String) -> Result<Vec<Statement>, DQError> {
+    fn parse_sql(&self, sql: &String) -> Result<Vec<Statement>, Error> {
         let dialect = GenericDialect {};
         let statements = Parser::parse_sql(&dialect, sql)?;
 
@@ -227,57 +225,40 @@ impl FlightSqlService for FlightSqlServiceSingle {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        self.check_token(&request)?;
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
 
-        let statements = self.parse_sql(&query.query)?;
+        let statements = self.parse_sql(&query.query).map_err(to_tonic_error)?;
         for statement in statements.iter() {
             log::info!("statement={:#?}", statement.to_string());
 
-            match statement {
-                Statement::Query(_) => {
-                    let handle: String = Uuid::new_v4().to_string();
+            let mut compute = self
+                .state
+                .lock()
+                .await
+                .get_compute()
+                .await
+                .expect("could not get compute engine");
 
-                    let batches = match sql::get_table(statement) {
-                        Some(table) => {
-                            let mut state = self.state.lock().await;
+            let batches = compute
+                .execute(statement, self.state.clone())
+                .await
+                .map_err(to_tonic_error)?;
 
-                            if let Some(table) = state.get_table(&table).await {
-                                table.execute(statement).await?
-                            } else {
-                                vec![RecordBatch::new_empty(Arc::new(Schema::empty()))]
-                            }
-                        }
-                        None => match statement {
-                            Statement::Query(query) => {
-                                if let SetExpr::Select(_) = query.body.as_ref() {
-                                    let ctx = SessionContext::new();
-                                    let df = ctx.sql(&statement.to_string()).await.unwrap();
+            let handle: String = Uuid::new_v4().to_string();
 
-                                    df.collect().await.unwrap()
-                                } else {
-                                    vec![RecordBatch::new_empty(Arc::new(Schema::empty()))]
-                                }
-                            }
-                            _ => vec![RecordBatch::new_empty(Arc::new(Schema::empty()))],
-                        },
-                    };
+            if let Ok(Some(flight_info)) =
+                self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
+            {
+                let mut handles = self.handles.lock().await;
+                handles.insert(handle.clone(), batches);
 
-                    if let Ok(Some(flight_info)) =
-                        self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
-                    {
-                        let mut handles = self.handles.lock().await;
-                        handles.insert(handle.clone(), batches);
-
-                        let res = Response::new(flight_info);
-                        log::info!("response={:#?}", res);
-                        return Ok(res);
-                    }
-                }
-                _ => unimplemented!(),
+                let res = Response::new(flight_info);
+                log::info!("response={:#?}", res);
+                return Ok(res);
             }
         }
 
-        Err(Status::not_found("No table or batches"))
+        Err(Status::internal("invalid sql"))
     }
 
     async fn get_flight_info_substrait_plan(
@@ -628,7 +609,7 @@ impl FlightSqlService for FlightSqlServiceSingle {
         log::info!("request={:#?}", request);
         log::info!("message={:#?}", message);
 
-        self.check_token(&request)?;
+        let _ = self.check_token(&request).map_err(to_tonic_error)?;
 
         if let Some(fetch_results) = message.unpack::<FetchResults>().unwrap() {
             let mut handles = self.handles.lock().await;
@@ -640,7 +621,8 @@ impl FlightSqlService for FlightSqlServiceSingle {
                     let num_bytes: usize = batches.iter().map(|b| b.get_array_memory_size()).sum();
                     log::info!("schema={:#?}", schema);
                     let flight_data =
-                        flight::batches_to_flight_data(schema.as_ref(), batches, self.compression)?
+                        flight::batches_to_flight_data(schema.as_ref(), batches, self.compression)
+                            .map_err(|e| status!("Could not convert batches", e))?
                             .into_iter()
                             .map(Ok);
 
@@ -654,7 +636,7 @@ impl FlightSqlService for FlightSqlServiceSingle {
             }
         }
 
-        Err(Status::not_found("No data"))
+        Err(Status::not_found("no data"))
     }
 
     async fn do_put_statement_update(

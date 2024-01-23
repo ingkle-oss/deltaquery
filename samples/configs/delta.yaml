@@ -1,14 +1,13 @@
 version: 1
 server: "single"
 listen: "0.0.0.0:32010"
+compute:
+  type: "duckdb"
+  options:
+    memory_limit: "-1"
 storages:
   - name: "delta"
     type: "delta"
-computes:
-  - name: "duckdb"
-    type: "duckdb"
-    options:
-      memory_limit: "-1"
 filesystems:
   - name: "minio"
     options:
@@ -21,20 +20,14 @@ filesystems:
 tables:
   - name: "delta.default.test0"
     storage: "delta"
-    compute: "duckdb"
     filesystem: "minio"
     location: "s3://test0/"
     predicates: "date,hour"
-    use_versioning: false
   - name: "delta.default.test1"
     storage: "delta"
-    compute: "duckdb"
     filesystem: "minio"
     location: "s3://test1/"
-    use_versioning: false
   - name: "delta.default.local"
     storage: "delta"
-    compute: "duckdb"
     location: "/Users/haruband/Documents/deltaquery/samples/samples/delta/"
     predicates: "date,hour"
-    use_versioning: false

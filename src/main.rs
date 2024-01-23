@@ -1,3 +1,4 @@
+use anyhow::Error;
 use clap::{Args, Command};
 use deltaquery::compute::register_compute_factory;
 use deltaquery::computes::duckdb::DQDuckDBComputeFactory;
@@ -5,8 +6,8 @@ use deltaquery::configs::DQConfig;
 use deltaquery::servers::flightsql;
 use deltaquery::servers::flightsql::{FlightSqlServiceSimple, FlightSqlServiceSingle};
 use deltaquery::state::DQState;
-use deltaquery::storage::register_storage_factory;
-use deltaquery::storages::delta::DQDeltaStorageFactory;
+use deltaquery::table::register_table_factory;
+use deltaquery::tables::delta::DQDeltaTableFactory;
 use env_logger::Builder;
 use std::env;
 use std::fs::File;
@@ -31,7 +32,7 @@ pub struct DQOption {
 fn handle_state(state: Arc<Mutex<DQState>>) {
     tokio::spawn(async move {
         let mut interval = time::interval(match env::var("DELTAQUERY_UPDATE_INTERVAL") {
-            Ok(value) => duration_str::parse(&value).unwrap(),
+            Ok(value) => duration_str::parse(&value).expect("could not parse update interval"),
             Err(_) => Duration::from_secs(60),
         });
 
@@ -55,7 +56,7 @@ fn handle_state(state: Arc<Mutex<DQState>>) {
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Error> {
     let cmd = Command::new("DeltaQuery");
     let cmd = DQOption::augment_args(cmd);
     let args = cmd.get_matches();
@@ -86,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => serde_yaml::Value::default(),
     };
 
-    register_storage_factory("delta", Box::new(DQDeltaStorageFactory::new())).await;
+    register_table_factory("delta", Box::new(DQDeltaTableFactory::new())).await;
     register_compute_factory("duckdb", Box::new(DQDuckDBComputeFactory::new())).await;
 
     let state = Arc::new(Mutex::new(DQState::new(config.clone()).await));

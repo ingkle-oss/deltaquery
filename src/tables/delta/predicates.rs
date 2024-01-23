@@ -1,7 +1,7 @@
 use arrow::datatypes::{DataType, Fields, TimeUnit};
-use deltalake::datafusion::common::scalar::ScalarValue;
-use deltalake::datafusion::common::Column;
-use deltalake::datafusion::logical_expr::{Cast, Expr};
+use datafusion::common::scalar::ScalarValue;
+use datafusion::common::Column;
+use datafusion::logical_expr::{Cast, Expr};
 
 pub fn parse_expression(
     predicates: &sqlparser::ast::Expr,
@@ -152,11 +152,11 @@ pub fn parse_expression(
             sqlparser::ast::Value::Number(n, l) => {
                 if *l {
                     Some(Expr::Literal(ScalarValue::Int64(Some(
-                        n.parse::<i64>().unwrap(),
+                        n.parse::<i64>().expect("could not parse int64"),
                     ))))
                 } else {
                     Some(Expr::Literal(ScalarValue::Int32(Some(
-                        n.parse::<i32>().unwrap(),
+                        n.parse::<i32>().expect("could not parse int32"),
                     ))))
                 }
             }

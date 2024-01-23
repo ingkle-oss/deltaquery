@@ -1,4 +1,4 @@
-use crate::error::DQError;
+use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow_flight::{FlightData, SchemaAsIpc};
 use arrow_ipc::writer::{DictionaryTracker, IpcDataGenerator, IpcWriteOptions};
@@ -11,7 +11,7 @@ pub fn batches_to_flight_data(
     schema: &Schema,
     batches: Vec<RecordBatch>,
     compression: Option<CompressionType>,
-) -> Result<Vec<FlightData>, DQError> {
+) -> Result<Vec<FlightData>, Error> {
     let options = IpcWriteOptions::try_new(8, false, MetadataVersion::V5)?
         .try_with_compression(compression)?;
     let schema_flight_data: FlightData = SchemaAsIpc::new(schema, &options).into();
@@ -54,7 +54,7 @@ pub fn batches_to_flight_data(
     Ok(flight_data)
 }
 
-pub fn merge_record_batches(batches: Vec<RecordBatch>) -> Result<RecordBatch, DQError> {
+pub fn merge_record_batches(batches: Vec<RecordBatch>) -> Result<RecordBatch, Error> {
     if let Some(batch0) = batches.first() {
         let schema = batch0.schema();
 

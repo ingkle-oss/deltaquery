@@ -1,16 +1,16 @@
 use crate::commons::delta;
 use crate::configs::{DQFilesystemConfig, DQStorageConfig, DQTableConfig};
-use crate::error::DQError;
-use crate::storage::{DQStorage, DQStorageFactory};
+use crate::table::{DQTable, DQTableFactory};
+use anyhow::Error;
 use arrow::array::cast::AsArray;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
 use chrono::Duration;
-use deltalake::datafusion::common::cast::as_string_array;
-use deltalake::datafusion::common::ToDFSchema;
-use deltalake::datafusion::physical_expr::create_physical_expr;
-use deltalake::datafusion::physical_expr::execution_props::ExecutionProps;
+use datafusion::common::cast::as_string_array;
+use datafusion::common::ToDFSchema;
+use datafusion::physical_expr::create_physical_expr;
+use datafusion::physical_expr::execution_props::ExecutionProps;
 use deltalake::kernel::{Action, Add, Metadata, Protocol};
 use deltalake::logstore::logstore_for;
 use deltalake::logstore::LogStoreRef;
@@ -35,7 +35,7 @@ struct DQDeltaFile {
     rank: usize,
 }
 
-pub struct DQDeltaStorage {
+pub struct DQDeltaTable {
     store: LogStoreRef,
 
     location: String,
@@ -44,21 +44,22 @@ pub struct DQDeltaStorage {
     version: i64,
     schema: SchemaRef,
 
-    use_versioning: bool,
-
     protocol: Protocol,
     metadata: Metadata,
     files: HashMap<String, DQDeltaFile>,
 
     stats: Vec<RecordBatch>,
     max_stats_batches: usize,
+    use_versioning: bool,
 
     timestamp_field: Option<String>,
     timestamp_template: String,
     timestamp_duration: Duration,
+
+    filesystem_options: HashMap<String, String>,
 }
 
-impl DQDeltaStorage {
+impl DQDeltaTable {
     pub async fn new(
         table_config: &DQTableConfig,
         storage_config: Option<&DQStorageConfig>,
@@ -83,7 +84,7 @@ impl DQDeltaStorage {
         };
         let store = logstore_for(
             ensure_table_uri(url.as_str()).expect("could not parse table location"),
-            filesystem_options,
+            filesystem_options.clone(),
         )
         .expect("could not get object store for table");
 
@@ -107,20 +108,22 @@ impl DQDeltaStorage {
             None => None,
         };
 
-        DQDeltaStorage {
+        DQDeltaTable {
             store,
             location,
             version: -1,
             predicates: predicates,
-            use_versioning: table_config.use_versioning.unwrap_or(false),
             protocol: Protocol::default(),
             metadata: Metadata::default(),
             schema: Arc::new(Schema::empty()),
             files: HashMap::new(),
             stats: Vec::new(),
-            max_stats_batches: storage_options
-                .get("max_stats_batches")
-                .map_or(32, |v| v.parse().unwrap()),
+            use_versioning: storage_options.get("use_versioning").map_or(false, |v| {
+                v.parse().expect("could not parse use_versioning")
+            }),
+            max_stats_batches: storage_options.get("max_stats_batches").map_or(32, |v| {
+                v.parse().expect("could not parse max_stats_batches")
+            }),
             timestamp_field: storage_options.get("timestamp_field").cloned(),
             timestamp_template: storage_options
                 .get("timestamp_template")
@@ -130,8 +133,9 @@ impl DQDeltaStorage {
             timestamp_duration: storage_options
                 .get("timestamp_duration")
                 .map_or(Duration::hours(1), |v| {
-                    duration_str::parse_chrono(v).unwrap()
+                    duration_str::parse_chrono(v).expect("could not parse timestamp_duration")
                 }),
+            filesystem_options,
         }
     }
 
@@ -140,7 +144,7 @@ impl DQDeltaStorage {
         self
     }
 
-    fn update_actions(&mut self, actions: &Vec<Action>, version: i64) -> Result<(), DQError> {
+    fn update_actions(&mut self, actions: &Vec<Action>, version: i64) -> Result<(), Error> {
         for action in actions {
             if let Action::Add(add) = action {
                 self.files.insert(
@@ -164,14 +168,14 @@ impl DQDeltaStorage {
                 self.protocol = protocol.clone();
             } else if let Action::Metadata(metadata) = action {
                 self.metadata = metadata.clone();
-                self.schema = Arc::new(Schema::try_from(&metadata.schema().unwrap()).unwrap());
+                self.schema = Arc::new(Schema::try_from(&metadata.schema()?)?);
             }
         }
 
         Ok(())
     }
 
-    fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), DQError> {
+    fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), Error> {
         let batch = statistics::get_record_batch_from_actions(
             &actions,
             &self.schema,
@@ -192,7 +196,7 @@ impl DQDeltaStorage {
         Ok(())
     }
 
-    async fn update_commits(&mut self) -> Result<(), DQError> {
+    async fn update_commits(&mut self) -> Result<(), Error> {
         let mut actions = Vec::new();
 
         let mut version = self.version;
@@ -226,8 +230,8 @@ impl DQDeltaStorage {
 }
 
 #[async_trait]
-impl DQStorage for DQDeltaStorage {
-    async fn update(&mut self) -> Result<(), DQError> {
+impl DQTable for DQDeltaTable {
+    async fn update(&mut self) -> Result<(), Error> {
         if self.version >= 0 {
             self.update_commits().await?;
         } else {
@@ -251,7 +255,7 @@ impl DQStorage for DQDeltaStorage {
         Ok(())
     }
 
-    async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, DQError> {
+    async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, Error> {
         let mut files: Vec<&DQDeltaFile> = Vec::new();
 
         match statement {
@@ -271,7 +275,7 @@ impl DQStorage for DQDeltaStorage {
                             let schema = batch0.schema();
                             let predicates = create_physical_expr(
                                 &expressions,
-                                &schema.clone().to_dfschema().unwrap(),
+                                &schema.clone().to_dfschema()?,
                                 &schema,
                                 &ExecutionProps::new(),
                             )?;
@@ -279,11 +283,11 @@ impl DQStorage for DQDeltaStorage {
                             for batch in self.stats.iter() {
                                 match predicates.evaluate(&batch) {
                                     Ok(results) => {
-                                        let results = results.into_array(batch.num_rows()).unwrap();
+                                        let results = results.into_array(batch.num_rows())?;
                                         let paths = as_string_array(
                                             batch
                                                 .column_by_name(statistics::STATS_TABLE_ADD_PATH)
-                                                .unwrap(),
+                                                .expect("could not get path column"),
                                         )?;
                                         for (result, path) in results.as_boolean().iter().zip(paths)
                                         {
@@ -322,34 +326,42 @@ impl DQStorage for DQDeltaStorage {
             .collect())
     }
 
-    async fn insert(&mut self, _statement: &Statement) -> Result<(), DQError> {
+    async fn insert(&mut self, _statement: &Statement) -> Result<(), Error> {
         Ok(())
     }
 
     fn schema(&self) -> Option<SchemaRef> {
         Some(self.schema.clone())
     }
+
+    fn partition_columns(&self) -> Option<&Vec<String>> {
+        self.predicates.as_ref()
+    }
+
+    fn filesystem_options(&self) -> &HashMap<String, String> {
+        &self.filesystem_options
+    }
 }
 
-pub struct DQDeltaStorageFactory {}
+pub struct DQDeltaTableFactory {}
 
-impl DQDeltaStorageFactory {
+impl DQDeltaTableFactory {
     pub fn new() -> Self {
         deltalake::aws::register_handlers(None);
 
-        DQDeltaStorageFactory {}
+        DQDeltaTableFactory {}
     }
 }
 
 #[async_trait]
-impl DQStorageFactory for DQDeltaStorageFactory {
+impl DQTableFactory for DQDeltaTableFactory {
     async fn create(
         &self,
         table_config: &DQTableConfig,
         storage_config: Option<&DQStorageConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
-    ) -> Box<dyn DQStorage> {
-        Box::new(DQDeltaStorage::new(table_config, storage_config, filesystem_config).await)
+    ) -> Box<dyn DQTable> {
+        Box::new(DQDeltaTable::new(table_config, storage_config, filesystem_config).await)
     }
 }
 
@@ -357,8 +369,8 @@ impl DQStorageFactory for DQDeltaStorageFactory {
 mod tests {
     use crate::commons::tests;
     use crate::configs::DQTableConfig;
-    use crate::storage::DQStorage;
-    use crate::storages::delta::DQDeltaStorage;
+    use crate::table::DQTable;
+    use crate::tables::delta::DQDeltaTable;
     use deltalake::logstore::default_logstore;
     use deltalake::ObjectStore;
     use object_store::memory::InMemory;
@@ -400,14 +412,12 @@ mod tests {
         let table_config = DQTableConfig {
             name: "test0".into(),
             storage: None,
-            compute: None,
             filesystem: None,
             location: None,
             predicates: None,
-            use_versioning: None,
         };
 
-        let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
+        let mut storage = DQDeltaTable::new(&table_config, None, None).await;
         storage = storage.with_store(log_store.clone());
         storage.update().await.unwrap();
 
@@ -443,13 +453,11 @@ mod tests {
         let table_config = DQTableConfig {
             name: "test0".into(),
             storage: None,
-            compute: None,
             filesystem: None,
             location: None,
             predicates: None,
-            use_versioning: None,
         };
-        let mut storage = DQDeltaStorage::new(&table_config, None, None).await;
+        let mut storage = DQDeltaTable::new(&table_config, None, None).await;
         storage = storage.with_store(log_store.clone());
 
         let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));

@@ -1,7 +1,6 @@
-use crate::compute::create_compute_using_factory;
+use crate::compute::{create_compute_using_factory, DQCompute};
 use crate::configs::{DQConfig, DQTableConfig};
-use crate::storage::create_storage_using_factory;
-use crate::table::DQTable;
+use crate::table::{create_table_using_factory, DQTable};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use std::collections::hash_map::IterMut;
@@ -10,7 +9,7 @@ use std::collections::HashMap;
 pub struct DQState {
     config: DQConfig,
 
-    tables: HashMap<String, DQTable>,
+    tables: HashMap<String, Box<dyn DQTable>>,
 
     pool: Option<Pool<Postgres>>,
 }
@@ -37,18 +36,19 @@ impl DQState {
         }
     }
 
-    pub async fn get_table(&mut self, target: &String) -> Option<&mut DQTable> {
+    pub async fn get_compute(&self) -> Option<Box<dyn DQCompute>> {
+        let config = &self.config.compute;
+
+        create_compute_using_factory(&config.r#type, Some(config)).await
+    }
+
+    pub async fn get_table(&mut self, target: &String) -> Option<&mut Box<dyn DQTable>> {
         if !self.tables.contains_key(target) {
             if let Some(table_config) = self.config.tables.iter().find(|c| &c.name == target) {
                 let storage_config = match &table_config.storage {
                     Some(name) => self.config.storages.iter().find(|c| &c.name == name),
                     None => None,
                 };
-                let compute_config = match &table_config.compute {
-                    Some(name) => self.config.computes.iter().find(|c| &c.name == name),
-                    None => None,
-                };
-
                 let filesystem_config = if let Some(filesystem) = &table_config.filesystem {
                     self.config
                         .filesystems
@@ -58,7 +58,7 @@ impl DQState {
                     None
                 };
 
-                if let Some(storage) = create_storage_using_factory(
+                if let Some(mut table) = create_table_using_factory(
                     storage_config.map_or("delta", |config| &config.r#type),
                     table_config,
                     storage_config,
@@ -66,19 +66,9 @@ impl DQState {
                 )
                 .await
                 {
-                    if let Some(compute) = create_compute_using_factory(
-                        compute_config.map_or("duckdb", |config| &config.r#type),
-                        table_config,
-                        compute_config,
-                        filesystem_config,
-                    )
-                    .await
-                    {
-                        let mut table = DQTable::new(storage, compute);
-                        let _ = table.update().await;
+                    let _ = table.update().await;
 
-                        self.tables.insert(target.clone(), table);
-                    }
+                    self.tables.insert(target.clone(), table);
                 }
             }
         }
@@ -90,7 +80,7 @@ impl DQState {
         }
     }
 
-    pub fn get_tables(&mut self) -> IterMut<'_, String, DQTable> {
+    pub fn get_tables(&mut self) -> IterMut<'_, String, Box<dyn DQTable>> {
         self.tables.iter_mut()
     }
 
