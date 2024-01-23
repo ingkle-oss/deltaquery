@@ -334,6 +334,10 @@ impl DQTable for DQDeltaTable {
         Some(self.schema.clone())
     }
 
+    fn partition_columns(&self) -> Option<&Vec<String>> {
+        self.predicates.as_ref()
+    }
+
     fn filesystem_options(&self) -> &HashMap<String, String> {
         &self.filesystem_options
     }

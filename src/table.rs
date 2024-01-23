@@ -18,6 +18,7 @@ pub trait DQTable: Send + Sync {
 
     fn schema(&self) -> Option<SchemaRef>;
 
+    fn partition_columns(&self) -> Option<&Vec<String>>;
     fn filesystem_options(&self) -> &HashMap<String, String>;
 }
 

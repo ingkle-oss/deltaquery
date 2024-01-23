@@ -231,35 +231,30 @@ impl FlightSqlService for FlightSqlServiceSingle {
         for statement in statements.iter() {
             log::info!("statement={:#?}", statement.to_string());
 
-            match statement {
-                Statement::Query(_) => {
-                    let handle: String = Uuid::new_v4().to_string();
+            let mut compute = self
+                .state
+                .lock()
+                .await
+                .get_compute()
+                .await
+                .expect("could not get compute engine");
 
-                    let mut compute = self
-                        .state
-                        .lock()
-                        .await
-                        .get_compute()
-                        .await
-                        .expect("could not get compute engine");
+            let batches = compute
+                .execute(statement, self.state.clone())
+                .await
+                .map_err(to_tonic_error)?;
 
-                    let batches = compute
-                        .execute(statement, self.state.clone())
-                        .await
-                        .map_err(to_tonic_error)?;
+            let handle: String = Uuid::new_v4().to_string();
 
-                    if let Ok(Some(flight_info)) =
-                        self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
-                    {
-                        let mut handles = self.handles.lock().await;
-                        handles.insert(handle.clone(), batches);
+            if let Ok(Some(flight_info)) =
+                self.build_flight_info(&batches, handle.clone(), self.endpoint.clone())
+            {
+                let mut handles = self.handles.lock().await;
+                handles.insert(handle.clone(), batches);
 
-                        let res = Response::new(flight_info);
-                        log::info!("response={:#?}", res);
-                        return Ok(res);
-                    }
-                }
-                _ => unimplemented!(),
+                let res = Response::new(flight_info);
+                log::info!("response={:#?}", res);
+                return Ok(res);
             }
         }
 

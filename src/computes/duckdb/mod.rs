@@ -31,8 +31,6 @@ impl DQCompute for DQDuckDBCompute {
         statement: &Statement,
         state: Arc<Mutex<DQState>>,
     ) -> Result<Vec<RecordBatch>, Error> {
-        let mut batches = Vec::new();
-
         match statement {
             Statement::Query(query) => {
                 if let SetExpr::Select(select) = query.body.as_ref() {
@@ -76,23 +74,24 @@ impl DQCompute for DQDuckDBCompute {
                                                 ),
                                             ))?;
 
-                                        batches.extend(
-                                            stmt.query_arrow([])?.collect::<Vec<RecordBatch>>(),
-                                        );
+                                        let batches =
+                                            stmt.query_arrow([])?.collect::<Vec<RecordBatch>>();
+
+                                        return Ok(batches);
                                     }
                                 } else {
                                     return Err(anyhow!(DQComputeError::NoTable));
                                 }
                             }
-                            _ => {}
+                            _ => return Err(anyhow!(DQComputeError::NotSupportedYet)),
                         }
                     }
                 }
             }
-            _ => unimplemented!(),
+            _ => return Err(anyhow!(DQComputeError::NotSupportedYet)),
         }
 
-        Ok(batches)
+        Err(anyhow!(DQComputeError::InvalidSql))
     }
 }
 
