@@ -6,6 +6,7 @@ use chrono::{DateTime, Duration};
 use datafusion::common::scalar::ScalarValue;
 use datafusion::common::DataFusionError;
 use deltalake::kernel::Action;
+use deltalake::protocol::Stats;
 use deltalake::DeltaTableError;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -167,7 +168,10 @@ pub fn get_record_batch_from_actions(
     for action in actions {
         if let Action::Add(add) = action {
             let partitions = &add.partition_values;
-            let stats = add.get_stats_parsed()?;
+            let stats: Option<Stats> = match &add.stats {
+                Some(stats) => Some(serde_json::from_str(stats)?),
+                None => None,
+            };
             for field in &fields0 {
                 let data_type = field.data_type();
 
