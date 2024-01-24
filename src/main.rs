@@ -5,7 +5,7 @@ use deltaquery::computes::duckdb::DQDuckDBComputeFactory;
 use deltaquery::configs::DQConfig;
 use deltaquery::servers::flightsql;
 use deltaquery::servers::flightsql::{FlightSqlServiceSimple, FlightSqlServiceSingle};
-use deltaquery::state::DQState;
+use deltaquery::state::{DQState, DQStateRef};
 use deltaquery::table::register_table_factory;
 use deltaquery::tables::delta::DQDeltaTableFactory;
 use env_logger::Builder;
@@ -13,7 +13,6 @@ use std::env;
 use std::fs::File;
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::Instant;
 use tokio::sync::Mutex;
 use tokio::time;
 
@@ -29,7 +28,7 @@ pub struct DQOption {
     logfilter: Option<String>,
 }
 
-fn handle_state(state: Arc<Mutex<DQState>>) {
+fn handle_state(state: DQStateRef) {
     tokio::spawn(async move {
         let mut interval = time::interval(match env::var("DELTAQUERY_UPDATE_INTERVAL") {
             Ok(value) => duration_str::parse(&value).expect("could not parse update interval"),
@@ -37,18 +36,8 @@ fn handle_state(state: Arc<Mutex<DQState>>) {
         });
 
         loop {
-            {
-                let mut state = state.lock().await;
-                state.update_tables().await;
-
-                for (_, table) in state.get_tables() {
-                    let time0 = Instant::now();
-
-                    let _ = table.update().await;
-
-                    log::info!("updated for {} milliseconds", time0.elapsed().as_millis());
-                }
-            }
+            DQState::rebuild_tables(state.clone()).await;
+            DQState::update_tables(state.clone()).await;
 
             interval.tick().await;
         }

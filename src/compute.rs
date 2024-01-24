@@ -1,5 +1,5 @@
 use crate::configs::DQComputeConfig;
-use crate::state::DQState;
+use crate::state::{DQComputeSessionRef, DQStateRef};
 use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{DataType, SchemaRef};
@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use sqlparser::ast::Statement;
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[allow(missing_docs)]
@@ -28,7 +27,7 @@ static COMPUTE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQComputeFactory>>>
 
 #[async_trait]
 pub trait DQCompute: Send + Sync {
-    async fn prepare(&self) -> Result<Box<dyn DQComputeSession>, Error>;
+    async fn prepare(&self) -> Result<DQComputeSessionRef, Error>;
 
     fn get_function_return_type(
         &self,
@@ -45,7 +44,7 @@ pub trait DQComputeSession: Send + Sync {
     async fn execute(
         &self,
         statement: &Statement,
-        state: Arc<Mutex<DQState>>,
+        state: DQStateRef,
     ) -> Result<Vec<RecordBatch>, Error>;
 }
 
