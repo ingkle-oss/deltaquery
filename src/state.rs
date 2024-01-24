@@ -110,7 +110,9 @@ impl DQState {
                 )
                 .await
                 {
-                    let _ = table.update().await;
+                    if let Err(err) = table.update().await {
+                        log::error!("failed to update table: {:?}", err);
+                    }
 
                     state
                         .tables
@@ -131,7 +133,10 @@ impl DQState {
 
         for (_, table) in state.tables.iter() {
             let mut table = table.lock().await;
-            let _ = table.update().await;
+
+            if let Err(err) = table.update().await {
+                log::error!("failed to update table: {:?}", err);
+            }
         }
     }
 

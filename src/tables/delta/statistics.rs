@@ -169,7 +169,10 @@ pub fn get_record_batch_from_actions(
         if let Action::Add(add) = action {
             let partitions = &add.partition_values;
             let stats: Option<Stats> = match &add.stats {
-                Some(stats) => Some(serde_json::from_str(stats)?),
+                Some(stats) => match serde_json::from_str(stats) {
+                    Ok(stats) => Some(stats),
+                    Err(_) => None,
+                },
                 None => None,
             };
             for field in &fields0 {
