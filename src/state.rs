@@ -4,17 +4,21 @@ use crate::table::{create_table_using_factory, DQTable};
 use anyhow::Error;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
-use std::collections::hash_map::IterMut;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+pub type DQStateRef = Arc<Mutex<DQState>>;
+pub type DQComputeRef = Arc<Mutex<Box<dyn DQCompute>>>;
+pub type DQComputeSessionRef = Box<dyn DQComputeSession>;
+pub type DQTableRef = Arc<Mutex<Box<dyn DQTable>>>;
+
 pub struct DQState {
     config: DQConfig,
 
-    compute: Option<Box<dyn DQCompute>>,
+    compute: Option<DQComputeRef>,
 
-    tables: HashMap<String, Box<dyn DQTable>>,
+    tables: HashMap<String, DQTableRef>,
 
     pool: Option<Pool<Postgres>>,
 }
@@ -42,29 +46,55 @@ impl DQState {
         }
     }
 
-    pub async fn get_compute(&mut self) -> Option<&mut Box<dyn DQCompute>> {
-        if self.compute.is_none() {
-            let config = &self.config.compute;
+    pub async fn get_compute(state: DQStateRef) -> Option<DQComputeRef> {
+        let mut state = state.lock().await;
 
-            self.compute = create_compute_using_factory(&config.r#type, Some(config)).await;
+        if state.compute.is_none() {
+            let config = &state.config.compute;
+
+            if let Some(compute) = create_compute_using_factory(&config.r#type, Some(config)).await
+            {
+                state.compute = Some(Arc::new(Mutex::new(compute)));
+            }
         }
 
-        if let Some(compute) = self.compute.as_mut() {
-            Some(compute)
+        if let Some(compute) = state.compute.as_ref() {
+            Some(compute.clone())
         } else {
             None
         }
     }
 
-    pub async fn get_table(&mut self, target: &String) -> Option<&mut Box<dyn DQTable>> {
-        if !self.tables.contains_key(target) {
-            if let Some(table_config) = self.config.tables.iter().find(|c| &c.name == target) {
+    pub async fn get_compute_session(state: DQStateRef) -> Result<DQComputeSessionRef, Error> {
+        let mut state = state.lock().await;
+
+        if state.compute.is_none() {
+            let config = &state.config.compute;
+
+            if let Some(compute) = create_compute_using_factory(&config.r#type, Some(config)).await
+            {
+                state.compute = Some(Arc::new(Mutex::new(compute)));
+            }
+        }
+
+        let compute = state.compute.clone().expect("could not get compute engine");
+        let compute = compute.lock().await;
+
+        compute.prepare().await
+    }
+
+    pub async fn get_table(state: DQStateRef, target: &String) -> Option<DQTableRef> {
+        let mut state = state.lock().await;
+
+        if !state.tables.contains_key(target) {
+            if let Some(table_config) = state.config.tables.iter().find(|c| &c.name == target) {
                 let storage_config = match &table_config.storage {
-                    Some(name) => self.config.storages.iter().find(|c| &c.name == name),
+                    Some(name) => state.config.storages.iter().find(|c| &c.name == name),
                     None => None,
                 };
                 let filesystem_config = if let Some(filesystem) = &table_config.filesystem {
-                    self.config
+                    state
+                        .config
                         .filesystems
                         .iter()
                         .find(|c| &c.name == filesystem)
@@ -82,24 +112,34 @@ impl DQState {
                 {
                     let _ = table.update().await;
 
-                    self.tables.insert(target.clone(), table);
+                    state
+                        .tables
+                        .insert(target.clone(), Arc::new(Mutex::new(table)));
                 }
             }
         }
 
-        if let Some(table) = self.tables.get_mut(target) {
-            Some(table)
+        if let Some(table) = state.tables.get(target) {
+            Some(table.clone())
         } else {
             None
         }
     }
 
-    pub fn get_tables(&mut self) -> IterMut<'_, String, Box<dyn DQTable>> {
-        self.tables.iter_mut()
+    pub async fn update_tables(state: DQStateRef) {
+        let state = state.lock().await;
+
+        for (_, table) in state.tables.iter() {
+            let mut table = table.lock().await;
+            let _ = table.update().await;
+        }
     }
 
-    pub async fn update_tables(&mut self) {
-        if let (Some(pool), Some(metastore)) = (self.pool.as_ref(), self.config.metastore.as_ref())
+    pub async fn rebuild_tables(state: DQStateRef) {
+        let mut state = state.lock().await;
+
+        if let (Some(pool), Some(metastore)) =
+            (state.pool.as_ref(), state.config.metastore.as_ref())
         {
             match sqlx::query_as::<_, DQTableConfig>(
                 format!(
@@ -113,55 +153,44 @@ impl DQState {
             .await
             {
                 Ok(tables) => {
-                    let indices0: Vec<usize> = (0..self.config.tables.len()).rev().collect();
+                    let indices0: Vec<usize> = (0..state.config.tables.len()).rev().collect();
                     let mut indices1 = Vec::new();
 
                     for table in tables.into_iter() {
-                        if let Some(index) =
-                            self.config.tables.iter().position(|c| c.name == table.name)
+                        if let Some(index) = state
+                            .config
+                            .tables
+                            .iter()
+                            .position(|c| c.name == table.name)
                         {
-                            let table0 = &self.config.tables[index];
+                            let table0 = &state.config.tables[index];
                             if table0 != &table {
                                 log::info!("update={:#?}", table);
 
-                                self.tables.remove(&table.name);
-                                self.config.tables[index] = table;
+                                state.tables.remove(&table.name);
+                                state.config.tables[index] = table;
                             }
 
                             indices1.push(index);
                         } else {
                             log::info!("insert={:#?}", table);
 
-                            self.config.tables.push(table);
+                            state.config.tables.push(table);
                         }
                     }
 
                     for index in indices0.into_iter() {
                         if !indices1.contains(&index) {
-                            let table = &self.config.tables[index];
+                            let table = state.config.tables.remove(index);
 
                             log::info!("delete={:#?}", table);
 
-                            self.tables.remove(&table.name);
-                            self.config.tables.remove(index);
+                            state.tables.remove(&table.name);
                         }
                     }
                 }
                 Err(err) => panic!("could not query tables: {:?}", err),
             }
         }
-    }
-
-    pub async fn prepare_compute_session(
-        state: Arc<Mutex<DQState>>,
-    ) -> Result<Box<dyn DQComputeSession>, Error> {
-        let mut state = state.lock().await;
-
-        let compute = state
-            .get_compute()
-            .await
-            .expect("could not get compute engine");
-
-        compute.prepare().await
     }
 }

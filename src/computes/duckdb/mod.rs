@@ -1,14 +1,12 @@
 use crate::compute::{DQCompute, DQComputeError, DQComputeFactory, DQComputeSession};
 use crate::configs::DQComputeConfig;
-use crate::state::DQState;
+use crate::state::{DQComputeSessionRef, DQState, DQStateRef};
 use anyhow::{anyhow, Error};
 use arrow::array::RecordBatch;
 use async_trait::async_trait;
 use duckdb::{params, Connection};
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use url::Url;
 
 pub struct DQDuckDBCompute {
@@ -26,8 +24,8 @@ impl DQDuckDBCompute {
 
 #[async_trait]
 impl DQCompute for DQDuckDBCompute {
-    async fn prepare(&self) -> Result<Box<dyn DQComputeSession>, Error> {
-        let session: Box<dyn DQComputeSession> =
+    async fn prepare(&self) -> Result<DQComputeSessionRef, Error> {
+        let session: DQComputeSessionRef =
             Box::new(DQDuckDBComputeSession::new(&self.compute_options).await);
 
         Ok(session)
@@ -51,7 +49,7 @@ impl DQComputeSession for DQDuckDBComputeSession {
     async fn execute(
         &self,
         statement: &Statement,
-        state: Arc<Mutex<DQState>>,
+        state: DQStateRef,
     ) -> Result<Vec<RecordBatch>, Error> {
         match statement {
             Statement::Query(query) => {
@@ -66,9 +64,10 @@ impl DQComputeSession for DQDuckDBComputeSession {
                                     .collect::<Vec<String>>();
                                 let target = target.join(".");
 
-                                let mut state = state.lock().await;
-
-                                if let Some(table) = state.get_table(&target).await {
+                                if let Some(table) =
+                                    DQState::get_table(state.clone(), &target).await
+                                {
+                                    let mut table = table.lock().await;
                                     let files = table.select(statement).await?;
 
                                     log::info!("files={:#?}, {}", files, files.len());

@@ -1,6 +1,6 @@
 use crate::commons::flight;
 use crate::servers::flightsql::helpers::{to_tonic_error, FetchResults};
-use crate::state::DQState;
+use crate::state::{DQState, DQStateRef};
 use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow_flight::encode::FlightDataEncoderBuilder;
@@ -65,7 +65,7 @@ pub struct FlightSqlServiceSingleConfig {
 
 #[derive(Clone)]
 pub struct FlightSqlServiceSingle {
-    state: Arc<Mutex<DQState>>,
+    state: DQStateRef,
 
     compression: Option<CompressionType>,
     endpoint: String,
@@ -74,7 +74,7 @@ pub struct FlightSqlServiceSingle {
 }
 
 impl FlightSqlServiceSingle {
-    pub async fn new(state: Arc<Mutex<DQState>>, catalog: serde_yaml::Value) -> Self {
+    pub async fn new(state: DQStateRef, catalog: serde_yaml::Value) -> Self {
         let config: FlightSqlServiceSingleConfig = serde_yaml::from_value(catalog).unwrap();
 
         let compression = match config.compression.as_deref() {
@@ -230,7 +230,7 @@ impl FlightSqlService for FlightSqlServiceSingle {
         for statement in statements.iter() {
             log::info!("statement={:#?}", statement.to_string());
 
-            let session = DQState::prepare_compute_session(self.state.clone())
+            let session = DQState::get_compute_session(self.state.clone())
                 .await
                 .map_err(to_tonic_error)?;
 

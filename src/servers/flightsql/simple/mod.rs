@@ -1,6 +1,6 @@
 use crate::commons::flight;
 use crate::servers::flightsql::helpers::{to_tonic_error, FetchResults};
-use crate::state::DQState;
+use crate::state::DQStateRef;
 use anyhow::Error;
 use arrow::array::builder::StringBuilder;
 use arrow::array::{ArrayRef, RecordBatch};
@@ -37,7 +37,6 @@ use prost::Message;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, Streaming};
 
 macro_rules! status {
@@ -90,7 +89,7 @@ static SIMPLE_TABLES: Lazy<Vec<&'static str>> = Lazy::new(|| vec!["deltaquery.si
 pub struct FlightSqlServiceSimple {}
 
 impl FlightSqlServiceSimple {
-    pub async fn new(_state: Arc<Mutex<DQState>>, _catalog: serde_yaml::Value) -> Self {
+    pub async fn new(_state: DQStateRef, _catalog: serde_yaml::Value) -> Self {
         FlightSqlServiceSimple {}
     }
 
