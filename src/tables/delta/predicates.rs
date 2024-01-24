@@ -1,4 +1,5 @@
 use arrow::datatypes::{DataType, Fields, TimeUnit};
+use chrono::NaiveDateTime;
 use datafusion::common::scalar::ScalarValue;
 use datafusion::common::Column;
 use datafusion::logical_expr::{Cast, Expr};
@@ -7,12 +8,13 @@ pub fn parse_expression(
     predicates: &sqlparser::ast::Expr,
     fields: &Fields,
     use_max: bool,
+    other: Option<&Expr>,
 ) -> Option<Expr> {
     match predicates {
         sqlparser::ast::Expr::BinaryOp { left, op, right } => match op {
             sqlparser::ast::BinaryOperator::And => {
-                let left = parse_expression(left, fields, use_max);
-                let right = parse_expression(right, fields, use_max);
+                let left = parse_expression(left, fields, use_max, None);
+                let right = parse_expression(right, fields, use_max, left.as_ref());
 
                 match (left, right) {
                     (Some(left), Some(right)) => Some(left.and(right)),
@@ -22,8 +24,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Or => {
-                let left = parse_expression(left, fields, use_max);
-                let right = parse_expression(right, fields, use_max);
+                let left = parse_expression(left, fields, use_max, None);
+                let right = parse_expression(right, fields, use_max, left.as_ref());
 
                 match (left, right) {
                     (Some(left), Some(right)) => Some(left.or(right)),
@@ -31,9 +33,9 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Eq => {
-                let min = parse_expression(left, fields, false);
-                let max = parse_expression(left, fields, true);
-                let right = parse_expression(right, fields, false);
+                let min = parse_expression(left, fields, false, None);
+                let max = parse_expression(left, fields, true, None);
+                let right = parse_expression(right, fields, false, min.as_ref());
 
                 if let (Some(min), Some(max), Some(right)) = (min, max, right) {
                     if min == max {
@@ -46,8 +48,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Lt => {
-                let left = parse_expression(left, fields, use_max);
-                let right = parse_expression(right, fields, use_max);
+                let left = parse_expression(left, fields, use_max, None);
+                let right = parse_expression(right, fields, use_max, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.lt(right))
@@ -56,8 +58,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::LtEq => {
-                let left = parse_expression(left, fields, use_max);
-                let right = parse_expression(right, fields, use_max);
+                let left = parse_expression(left, fields, use_max, None);
+                let right = parse_expression(right, fields, use_max, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.lt_eq(right))
@@ -66,8 +68,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Gt => {
-                let left = parse_expression(left, fields, use_max);
-                let right = parse_expression(right, fields, use_max);
+                let left = parse_expression(left, fields, use_max, None);
+                let right = parse_expression(right, fields, use_max, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.gt(right))
@@ -76,8 +78,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::GtEq => {
-                let left = parse_expression(left, fields, use_max);
-                let right = parse_expression(right, fields, use_max);
+                let left = parse_expression(left, fields, use_max, None);
+                let right = parse_expression(right, fields, use_max, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.gt_eq(right))
@@ -93,22 +95,16 @@ pub fn parse_expression(
             low,
             high,
         } => {
-            let min = parse_expression(expr, fields, false);
-            let max = parse_expression(expr, fields, true);
-            let low = parse_expression(low, fields, use_max);
-            let high = parse_expression(high, fields, use_max);
+            let min = parse_expression(expr, fields, false, None);
+            let max = parse_expression(expr, fields, true, None);
+            let low = parse_expression(low, fields, use_max, min.as_ref());
+            let high = parse_expression(high, fields, use_max, max.as_ref());
 
             if let (Some(min), Some(max), Some(low), Some(high)) = (min, max, low, high) {
                 if *negated {
-                    Some(
-                        min.not_between(low.clone(), high.clone())
-                            .and(max.not_between(low, high)),
-                    )
+                    Some(min.gt(high).or(max.lt(low)))
                 } else {
-                    Some(
-                        min.between(low.clone(), high.clone())
-                            .or(max.between(low, high)),
-                    )
+                    Some(min.lt_eq(high).and(max.gt_eq(low)))
                 }
             } else {
                 None
@@ -136,10 +132,6 @@ pub fn parse_expression(
                         Box::new(Expr::Column(Column::from_name(column))),
                         DataType::Utf8,
                     )),
-                    DataType::Timestamp(TimeUnit::Microsecond, None) => Expr::Cast(Cast::new(
-                        Box::new(Expr::Column(Column::from_name(column))),
-                        DataType::Utf8,
-                    )),
                     _ => Expr::Column(Column::from_name(column)),
                 };
 
@@ -161,7 +153,67 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::Value::SingleQuotedString(s) => {
-                Some(Expr::Literal(ScalarValue::Utf8(Some(s.clone()))))
+                if let Some(other) = other {
+                    if let Some((_, field)) = fields.find(&other.to_string()) {
+                        match field.data_type() {
+                            DataType::Timestamp(unit, None) => {
+                                let mut literal = None;
+
+                                let formats = vec![
+                                    "%Y-%m-%dT%H:%M:%S%.fZ",
+                                    "%Y-%m-%dT%H:%M:%S%.f",
+                                    "%Y-%m-%dT%H:%M:%S%z",
+                                    "%Y-%m-%dT%H:%M:%S",
+                                    "%Y-%m-%d %H:%M:%S%.fZ",
+                                    "%Y-%m-%d %H:%M:%S%.f",
+                                    "%Y-%m-%d %H:%M:%S%z",
+                                    "%Y-%m-%d %H:%M:%S",
+                                    "%Y-%m-%d %H:%M",
+                                ];
+
+                                for format in formats {
+                                    if let Ok(datetime) = NaiveDateTime::parse_from_str(s, format) {
+                                        literal = match unit {
+                                            TimeUnit::Nanosecond => Some(Expr::Literal(
+                                                ScalarValue::TimestampMicrosecond(
+                                                    datetime.timestamp_nanos_opt(),
+                                                    None,
+                                                ),
+                                            )),
+                                            TimeUnit::Microsecond => Some(Expr::Literal(
+                                                ScalarValue::TimestampMicrosecond(
+                                                    Some(datetime.timestamp_micros()),
+                                                    None,
+                                                ),
+                                            )),
+                                            TimeUnit::Millisecond => Some(Expr::Literal(
+                                                ScalarValue::TimestampMillisecond(
+                                                    Some(datetime.timestamp_millis()),
+                                                    None,
+                                                ),
+                                            )),
+                                            TimeUnit::Second => {
+                                                Some(Expr::Literal(ScalarValue::TimestampSecond(
+                                                    Some(datetime.timestamp()),
+                                                    None,
+                                                )))
+                                            }
+                                        };
+
+                                        break;
+                                    }
+                                }
+
+                                literal
+                            }
+                            _ => Some(Expr::Literal(ScalarValue::Utf8(Some(s.clone())))),
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             }
             _ => unimplemented!(),
         },

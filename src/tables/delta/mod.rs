@@ -269,6 +269,7 @@ impl DQTable for DQDeltaTable {
                             &selection,
                             &batch0.schema().fields(),
                             false,
+                            None,
                         ) {
                             log::info!("filters={:#?}", expressions);
 
