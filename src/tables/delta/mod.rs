@@ -482,5 +482,14 @@ mod tests {
             Parser::parse_sql(&dialect, "select * from test0 where value >= 0").unwrap();
         let files = storage.select(statements.first().unwrap()).await.unwrap();
         assert_eq!(files.len(), 2);
+        assert_eq!(
+            storage
+                .stats
+                .iter()
+                .map(|batch| batch.num_rows())
+                .reduce(|a, b| a + b)
+                .unwrap_or(0),
+            2
+        );
     }
 }
