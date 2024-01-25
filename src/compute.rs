@@ -12,14 +12,14 @@ use tokio::sync::Mutex;
 #[allow(missing_docs)]
 #[derive(thiserror::Error, Debug)]
 pub enum DQComputeError {
-    #[error("no table")]
-    NoTable,
+    #[error("no table: {message}")]
+    NoTable { message: String },
 
-    #[error("invalid sql")]
-    InvalidSql,
+    #[error("invalid sql: {message}")]
+    InvalidSql { message: String },
 
-    #[error("not supported yet")]
-    NotSupportedYet,
+    #[error("not supported yet: {message}")]
+    NotSupportedYet { message: String },
 }
 
 static COMPUTE_FACTORIES: Lazy<Mutex<HashMap<String, Box<dyn DQComputeFactory>>>> =

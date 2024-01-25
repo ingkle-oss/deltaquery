@@ -101,18 +101,30 @@ impl DQComputeSession for DQDuckDBComputeSession {
                                         return Ok(batches);
                                     }
                                 } else {
-                                    return Err(anyhow!(DQComputeError::NoTable));
+                                    return Err(anyhow!(DQComputeError::NoTable {
+                                        message: target
+                                    }));
                                 }
                             }
-                            _ => return Err(anyhow!(DQComputeError::NotSupportedYet)),
+                            _ => {
+                                return Err(anyhow!(DQComputeError::NotSupportedYet {
+                                    message: table.relation.to_string()
+                                }))
+                            }
                         }
                     }
                 }
             }
-            _ => return Err(anyhow!(DQComputeError::NotSupportedYet)),
+            _ => {
+                return Err(anyhow!(DQComputeError::NotSupportedYet {
+                    message: statement.to_string()
+                }))
+            }
         }
 
-        Err(anyhow!(DQComputeError::InvalidSql))
+        Err(anyhow!(DQComputeError::InvalidSql {
+            message: statement.to_string()
+        }))
     }
 }
 
