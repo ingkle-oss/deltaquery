@@ -19,7 +19,6 @@ use deltalake::ObjectStoreError;
 use sqlparser::ast::{SetExpr, Statement};
 use std::collections::HashMap;
 use std::sync::Arc;
-use url::Url;
 
 mod predicates;
 mod statistics;
@@ -60,33 +59,22 @@ pub struct DQDeltaTable {
 }
 
 impl DQDeltaTable {
-    pub async fn new(
+    pub async fn try_new(
         table_config: &DQTableConfig,
         storage_config: Option<&DQStorageConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let storage_options =
             storage_config.map_or(HashMap::new(), |config| config.options.clone());
         let filesystem_options =
             filesystem_config.map_or(HashMap::new(), |config| config.options.clone());
 
         let location = match &table_config.location {
-            Some(location) => location.trim_end_matches("/").to_string(),
+            Some(location) => location.clone(),
             None => "memory://".into(),
         };
 
-        let url = match Url::parse(&location) {
-            Ok(url) => url,
-            Err(url::ParseError::RelativeUrlWithoutBase) => {
-                Url::from_file_path(&location).expect("could not parse table location")
-            }
-            Err(_) => panic!("could not parse table location"),
-        };
-        let store = logstore_for(
-            ensure_table_uri(url.as_str()).expect("could not parse table location"),
-            filesystem_options.clone(),
-        )
-        .expect("could not get object store for table");
+        let store = logstore_for(ensure_table_uri(&location)?, filesystem_options.clone())?;
 
         let predicates = match table_config.predicates.as_ref() {
             Some(predicates) => {
@@ -108,7 +96,7 @@ impl DQDeltaTable {
             None => None,
         };
 
-        DQDeltaTable {
+        Ok(DQDeltaTable {
             store,
             location,
             version: -1,
@@ -136,7 +124,7 @@ impl DQDeltaTable {
                     duration_str::parse_chrono(v).expect("could not parse timestamp_duration")
                 }),
             filesystem_options,
-        }
+        })
     }
 
     pub fn with_store(mut self, store: LogStoreRef) -> Self {
@@ -361,8 +349,10 @@ impl DQTableFactory for DQDeltaTableFactory {
         table_config: &DQTableConfig,
         storage_config: Option<&DQStorageConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
-    ) -> Box<dyn DQTable> {
-        Box::new(DQDeltaTable::new(table_config, storage_config, filesystem_config).await)
+    ) -> Result<Box<dyn DQTable>, Error> {
+        Ok(Box::new(
+            DQDeltaTable::try_new(table_config, storage_config, filesystem_config).await?,
+        ))
     }
 }
 
@@ -418,7 +408,9 @@ mod tests {
             predicates: None,
         };
 
-        let mut storage = DQDeltaTable::new(&table_config, None, None).await;
+        let mut storage = DQDeltaTable::try_new(&table_config, None, None)
+            .await
+            .unwrap();
         storage = storage.with_store(log_store.clone());
         storage.update().await.unwrap();
 
@@ -458,7 +450,9 @@ mod tests {
             location: None,
             predicates: None,
         };
-        let mut storage = DQDeltaTable::new(&table_config, None, None).await;
+        let mut storage = DQDeltaTable::try_new(&table_config, None, None)
+            .await
+            .unwrap();
         storage = storage.with_store(log_store.clone());
 
         let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));

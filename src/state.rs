@@ -1,7 +1,7 @@
-use crate::compute::{create_compute_using_factory, DQCompute, DQComputeSession};
+use crate::compute::{create_compute_using_factory, DQCompute, DQComputeError, DQComputeSession};
 use crate::configs::{DQConfig, DQTableConfig};
 use crate::table::{create_table_using_factory, DQTable};
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
@@ -46,23 +46,18 @@ impl DQState {
         }
     }
 
-    pub async fn get_compute(state: DQStateRef) -> Option<DQComputeRef> {
+    pub async fn get_compute(state: DQStateRef) -> Result<DQComputeRef, Error> {
         let mut state = state.lock().await;
 
         if state.compute.is_none() {
             let config = &state.config.compute;
 
-            if let Some(compute) = create_compute_using_factory(&config.r#type, Some(config)).await
-            {
-                state.compute = Some(Arc::new(Mutex::new(compute)));
-            }
+            let compute = create_compute_using_factory(&config.r#type, Some(config)).await?;
+            state.compute = Some(Arc::new(Mutex::new(compute)));
         }
 
-        if let Some(compute) = state.compute.as_ref() {
-            Some(compute.clone())
-        } else {
-            None
-        }
+        let compute = state.compute.as_ref().expect("could not get compute");
+        Ok(compute.clone())
     }
 
     pub async fn get_compute_session(state: DQStateRef) -> Result<DQComputeSessionRef, Error> {
@@ -71,10 +66,8 @@ impl DQState {
         if state.compute.is_none() {
             let config = &state.config.compute;
 
-            if let Some(compute) = create_compute_using_factory(&config.r#type, Some(config)).await
-            {
-                state.compute = Some(Arc::new(Mutex::new(compute)));
-            }
+            let compute = create_compute_using_factory(&config.r#type, Some(config)).await?;
+            state.compute = Some(Arc::new(Mutex::new(compute)));
         }
 
         let compute = state.compute.clone().expect("could not get compute engine");
@@ -83,7 +76,7 @@ impl DQState {
         compute.prepare().await
     }
 
-    pub async fn get_table(state: DQStateRef, target: &String) -> Option<DQTableRef> {
+    pub async fn get_table(state: DQStateRef, target: &String) -> Result<DQTableRef, Error> {
         let mut state = state.lock().await;
 
         if !state.tables.contains_key(target) {
@@ -102,29 +95,28 @@ impl DQState {
                     None
                 };
 
-                if let Some(mut table) = create_table_using_factory(
+                let mut table = create_table_using_factory(
                     storage_config.map_or("delta", |config| &config.r#type),
                     table_config,
                     storage_config,
                     filesystem_config,
                 )
-                .await
-                {
-                    if let Err(err) = table.update().await {
-                        log::error!("failed to update table: {:?}", err);
-                    }
-
-                    state
-                        .tables
-                        .insert(target.clone(), Arc::new(Mutex::new(table)));
+                .await?;
+                if let Err(err) = table.update().await {
+                    log::error!("failed to update table: {:?}", err);
                 }
+
+                state
+                    .tables
+                    .insert(target.clone(), Arc::new(Mutex::new(table)));
             }
         }
 
-        if let Some(table) = state.tables.get(target) {
-            Some(table.clone())
-        } else {
-            None
+        match state.tables.get(target) {
+            Some(table) => Ok(table.clone()),
+            None => Err(anyhow!(DQComputeError::NoTable {
+                message: target.clone()
+            })),
         }
     }
 

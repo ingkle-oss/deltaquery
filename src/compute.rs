@@ -50,7 +50,10 @@ pub trait DQComputeSession: Send + Sync {
 
 #[async_trait]
 pub trait DQComputeFactory: Send + Sync {
-    async fn create(&self, compute_config: Option<&DQComputeConfig>) -> Box<dyn DQCompute>;
+    async fn create(
+        &self,
+        compute_config: Option<&DQComputeConfig>,
+    ) -> Result<Box<dyn DQCompute>, Error>;
 }
 
 pub async fn register_compute_factory(name: &str, factory: Box<dyn DQComputeFactory>) {
@@ -61,12 +64,9 @@ pub async fn register_compute_factory(name: &str, factory: Box<dyn DQComputeFact
 pub async fn create_compute_using_factory(
     name: &str,
     compute_config: Option<&DQComputeConfig>,
-) -> Option<Box<dyn DQCompute>> {
+) -> Result<Box<dyn DQCompute>, Error> {
     let factories = COMPUTE_FACTORIES.lock().await;
-    if let Some(factory) = factories.get(name) {
-        let compute: Box<dyn DQCompute> = factory.create(compute_config).await;
-        Some(compute)
-    } else {
-        None
-    }
+    let factory = factories.get(name).expect("could not get compute factory");
+    let compute: Box<dyn DQCompute> = factory.create(compute_config).await?;
+    Ok(compute)
 }
