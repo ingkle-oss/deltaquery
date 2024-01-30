@@ -26,7 +26,7 @@ impl DQDuckDBCompute {
 impl DQCompute for DQDuckDBCompute {
     async fn prepare(&self) -> Result<DQComputeSessionRef, Error> {
         let session: DQComputeSessionRef =
-            Box::new(DQDuckDBComputeSession::new(&self.compute_options).await);
+            Box::new(DQDuckDBComputeSession::try_new(&self.compute_options).await?);
 
         Ok(session)
     }
@@ -37,10 +37,10 @@ pub struct DQDuckDBComputeSession {
 }
 
 impl DQDuckDBComputeSession {
-    pub async fn new(compute_options: &HashMap<String, String>) -> Self {
-        DQDuckDBComputeSession {
+    pub async fn try_new(compute_options: &HashMap<String, String>) -> Result<Self, Error> {
+        Ok(DQDuckDBComputeSession {
             compute_options: compute_options.clone(),
-        }
+        })
     }
 }
 

@@ -74,8 +74,8 @@ pub struct FlightSqlServiceSingle {
 }
 
 impl FlightSqlServiceSingle {
-    pub async fn new(state: DQStateRef, catalog: serde_yaml::Value) -> Self {
-        let config: FlightSqlServiceSingleConfig = serde_yaml::from_value(catalog).unwrap();
+    pub async fn try_new(state: DQStateRef, catalog: serde_yaml::Value) -> Result<Self, Error> {
+        let config: FlightSqlServiceSingleConfig = serde_yaml::from_value(catalog)?;
 
         let compression = match config.compression.as_deref() {
             Some("zstd") => Some(CompressionType::ZSTD),
@@ -84,21 +84,19 @@ impl FlightSqlServiceSingle {
         };
         let endpoint = match config.endpoint {
             Some(endpoint) => endpoint.clone(),
-            None => local_ip_address::local_ip()
-                .expect("could not fetch local ip address")
-                .to_string(),
+            None => local_ip_address::local_ip()?.to_string(),
         };
         let port = match config.port {
             Some(port) => port,
             None => 32010,
         };
 
-        FlightSqlServiceSingle {
+        Ok(FlightSqlServiceSingle {
             state,
             compression,
             endpoint: format!("grpc://{}:{}", endpoint, port),
             handles: Arc::new(Mutex::new(HashMap::new())),
-        }
+        })
     }
 
     fn build_flight_info(

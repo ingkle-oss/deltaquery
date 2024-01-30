@@ -24,26 +24,25 @@ pub struct DQState {
 }
 
 impl DQState {
-    pub async fn new(config: DQConfig) -> Self {
+    pub async fn try_new(config: DQConfig) -> Result<Self, Error> {
         let pool = match config.metastore.as_ref() {
             Some(metastore) => {
                 let pool = PgPoolOptions::new()
                     .max_connections(5)
                     .connect(metastore.url.as_str())
-                    .await
-                    .unwrap();
+                    .await?;
 
                 Some(pool)
             }
             None => None,
         };
 
-        DQState {
+        Ok(DQState {
             config,
             compute: None,
             tables: HashMap::new(),
             pool,
-        }
+        })
     }
 
     pub async fn get_compute(state: DQStateRef) -> Result<DQComputeRef, Error> {

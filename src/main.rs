@@ -79,21 +79,21 @@ async fn main() -> Result<(), Error> {
     register_table_factory("delta", Box::new(DQDeltaTableFactory::new())).await;
     register_compute_factory("duckdb", Box::new(DQDuckDBComputeFactory::new())).await;
 
-    let state = Arc::new(Mutex::new(DQState::new(config.clone()).await));
+    let state = Arc::new(Mutex::new(DQState::try_new(config.clone()).await?));
     handle_state(state.clone());
 
     match config.server.as_str() {
         "single" => {
             flightsql::server::serve(
                 config,
-                FlightSqlServiceSingle::new(state.clone(), catalog).await,
+                FlightSqlServiceSingle::try_new(state.clone(), catalog).await?,
             )
             .await?;
         }
         _ => {
             flightsql::server::serve(
                 config,
-                FlightSqlServiceSimple::new(state.clone(), catalog).await,
+                FlightSqlServiceSimple::try_new(state.clone(), catalog).await?,
             )
             .await?;
         }
