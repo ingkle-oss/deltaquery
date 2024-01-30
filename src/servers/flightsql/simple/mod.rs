@@ -89,8 +89,8 @@ static SIMPLE_TABLES: Lazy<Vec<&'static str>> = Lazy::new(|| vec!["deltaquery.si
 pub struct FlightSqlServiceSimple {}
 
 impl FlightSqlServiceSimple {
-    pub async fn new(_state: DQStateRef, _catalog: serde_yaml::Value) -> Self {
-        FlightSqlServiceSimple {}
+    pub async fn try_new(_state: DQStateRef, _catalog: serde_yaml::Value) -> Result<Self, Error> {
+        Ok(FlightSqlServiceSimple {})
     }
 
     fn check_token<T>(&self, request: &Request<T>) -> Result<(), Error> {
