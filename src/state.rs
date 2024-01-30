@@ -4,7 +4,7 @@ use crate::table::{create_table_using_factory, DQTable};
 use anyhow::{anyhow, Error};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -188,5 +188,83 @@ impl DQState {
                 Err(err) => panic!("could not query tables: {:?}", err),
             }
         }
+    }
+
+    pub async fn get_databases(state: DQStateRef) -> Result<HashSet<String>, Error> {
+        let state = state.lock().await;
+
+        let mut items = HashSet::new();
+
+        for table in state.config.tables.iter() {
+            let fields = table.name.split(".").collect::<Vec<_>>();
+
+            if let Some(field) = fields.get(0) {
+                items.insert(field.to_string());
+            }
+        }
+
+        Ok(items)
+    }
+
+    pub async fn get_schemas(
+        state: DQStateRef,
+        scope: Option<String>,
+    ) -> Result<HashSet<String>, Error> {
+        let state = state.lock().await;
+
+        let mut items = HashSet::new();
+
+        if let Some(scope) = &scope {
+            for table in state.config.tables.iter() {
+                if table.name.starts_with(scope) {
+                    let fields = table.name.split(".").collect::<Vec<_>>();
+
+                    if let Some(field) = fields.get(1) {
+                        items.insert(field.to_string());
+                    }
+                }
+            }
+        } else {
+            for table in state.config.tables.iter() {
+                let fields = table.name.split(".").collect::<Vec<_>>();
+
+                if let Some(field) = fields.get(1) {
+                    items.insert(field.to_string());
+                }
+            }
+        }
+
+        Ok(items)
+    }
+
+    pub async fn get_tables(
+        state: DQStateRef,
+        scope: Option<String>,
+    ) -> Result<HashSet<String>, Error> {
+        let state = state.lock().await;
+
+        let mut items = HashSet::new();
+
+        if let Some(scope) = &scope {
+            for table in state.config.tables.iter() {
+                if table.name.starts_with(scope) {
+                    let fields = table.name.split(".").collect::<Vec<_>>();
+
+                    if let Some(field) = fields.get(2) {
+                        items.insert(field.to_string());
+                    }
+                }
+            }
+        } else {
+            for table in state.config.tables.iter() {
+                let fields = table.name.split(".").collect::<Vec<_>>();
+
+                if let Some(field) = fields.get(2) {
+                    items.insert(field.to_string());
+                }
+            }
+        }
+
+        Ok(items)
     }
 }
