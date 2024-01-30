@@ -70,7 +70,7 @@ impl DQDeltaTable {
             filesystem_config.map_or(HashMap::new(), |config| config.options.clone());
 
         let location = match &table_config.location {
-            Some(location) => location.clone(),
+            Some(location) => location.trim_end_matches("/").to_string(),
             None => "memory://".into(),
         };
 
