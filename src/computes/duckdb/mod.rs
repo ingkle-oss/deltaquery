@@ -14,11 +14,11 @@ pub struct DQDuckDBCompute {
 }
 
 impl DQDuckDBCompute {
-    pub async fn new(compute_config: Option<&DQComputeConfig>) -> Self {
+    pub async fn try_new(compute_config: Option<&DQComputeConfig>) -> Result<Self, Error> {
         let compute_options =
             compute_config.map_or(HashMap::new(), |config| config.options.clone());
 
-        DQDuckDBCompute { compute_options }
+        Ok(DQDuckDBCompute { compute_options })
     }
 }
 
@@ -64,46 +64,39 @@ impl DQComputeSession for DQDuckDBComputeSession {
                                     .collect::<Vec<String>>();
                                 let target = target.join(".");
 
-                                if let Some(table) =
-                                    DQState::get_table(state.clone(), &target).await
-                                {
-                                    let mut table = table.lock().await;
-                                    let files = table.select(statement).await?;
+                                let table = DQState::get_table(state.clone(), &target).await?;
+                                let mut table = table.lock().await;
+                                let files = table.select(statement).await?;
 
-                                    log::info!("files={:#?}, {}", files, files.len());
+                                log::info!("files={:#?}, {}", files, files.len());
 
-                                    if files.len() > 0 {
-                                        let engine = Connection::open_in_memory()?;
-                                        setup_duckdb(
-                                            &engine,
-                                            &self.compute_options,
-                                            table.filesystem_options(),
-                                        )?;
+                                if files.len() > 0 {
+                                    let engine = Connection::open_in_memory()?;
+                                    setup_duckdb(
+                                        &engine,
+                                        &self.compute_options,
+                                        table.filesystem_options(),
+                                    )?;
 
-                                        let files = files
-                                            .iter()
-                                            .map(|file| format!("'{}'", file))
-                                            .collect::<Vec<String>>()
-                                            .join(",");
+                                    let files = files
+                                        .iter()
+                                        .map(|file| format!("'{}'", file))
+                                        .collect::<Vec<String>>()
+                                        .join(",");
 
-                                        let mut stmt =
-                                            engine.prepare(&statement.to_string().replace(
-                                                &target,
-                                                &format!(
-                                                    "read_parquet([{}], union_by_name=true)",
-                                                    files
-                                                ),
-                                            ))?;
+                                    let mut stmt =
+                                        engine.prepare(&statement.to_string().replace(
+                                            &target,
+                                            &format!(
+                                                "read_parquet([{}], union_by_name=true)",
+                                                files
+                                            ),
+                                        ))?;
 
-                                        let batches =
-                                            stmt.query_arrow([])?.collect::<Vec<RecordBatch>>();
+                                    let batches =
+                                        stmt.query_arrow([])?.collect::<Vec<RecordBatch>>();
 
-                                        return Ok(batches);
-                                    }
-                                } else {
-                                    return Err(anyhow!(DQComputeError::NoTable {
-                                        message: target
-                                    }));
+                                    return Ok(batches);
                                 }
                             }
                             _ => {
@@ -138,8 +131,11 @@ impl DQDuckDBComputeFactory {
 
 #[async_trait]
 impl DQComputeFactory for DQDuckDBComputeFactory {
-    async fn create(&self, compute_config: Option<&DQComputeConfig>) -> Box<dyn DQCompute> {
-        Box::new(DQDuckDBCompute::new(compute_config).await)
+    async fn create(
+        &self,
+        compute_config: Option<&DQComputeConfig>,
+    ) -> Result<Box<dyn DQCompute>, Error> {
+        Ok(Box::new(DQDuckDBCompute::try_new(compute_config).await?))
     }
 }
 

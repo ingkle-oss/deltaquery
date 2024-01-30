@@ -29,7 +29,7 @@ pub trait DQTableFactory: Send + Sync {
         table_config: &DQTableConfig,
         storage_config: Option<&DQStorageConfig>,
         filesystem_config: Option<&DQFilesystemConfig>,
-    ) -> Box<dyn DQTable>;
+    ) -> Result<Box<dyn DQTable>, Error>;
 }
 
 pub async fn register_table_factory(name: &str, factory: Box<dyn DQTableFactory>) {
@@ -42,14 +42,11 @@ pub async fn create_table_using_factory(
     table_config: &DQTableConfig,
     storage_config: Option<&DQStorageConfig>,
     filesystem_config: Option<&DQFilesystemConfig>,
-) -> Option<Box<dyn DQTable>> {
+) -> Result<Box<dyn DQTable>, Error> {
     let factories = TABLE_FACTORIES.lock().await;
-    if let Some(factory) = factories.get(name) {
-        let table: Box<dyn DQTable> = factory
-            .create(table_config, storage_config, filesystem_config)
-            .await;
-        Some(table)
-    } else {
-        None
-    }
+    let factory = factories.get(name).expect("could not get table factory");
+    let table: Box<dyn DQTable> = factory
+        .create(table_config, storage_config, filesystem_config)
+        .await?;
+    Ok(table)
 }
