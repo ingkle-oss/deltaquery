@@ -215,8 +215,8 @@ pub fn parse_expression(
                     None
                 }
             }
-            _ => unimplemented!(),
+            _ => None,
         },
-        _ => unimplemented!(),
+        _ => None,
     }
 }
