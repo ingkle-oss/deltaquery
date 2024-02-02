@@ -4,12 +4,11 @@ use arrow_flight::{FlightData, SchemaAsIpc};
 use arrow_ipc::writer::{DictionaryTracker, IpcDataGenerator, IpcWriteOptions};
 use arrow_ipc::{CompressionType, MetadataVersion};
 use arrow_schema::Schema;
-use arrow_select::concat::concat_batches;
 use std::sync::Arc;
 
 pub fn batches_to_flight_data(
     schema: &Schema,
-    batches: Vec<RecordBatch>,
+    batches: Arc<Vec<RecordBatch>>,
     compression: Option<CompressionType>,
 ) -> Result<Vec<FlightData>, Error> {
     let options = IpcWriteOptions::try_new(8, false, MetadataVersion::V5)?
@@ -52,16 +51,4 @@ pub fn batches_to_flight_data(
     stream.extend(flight_data);
     let flight_data: Vec<_> = stream.into_iter().collect();
     Ok(flight_data)
-}
-
-pub fn merge_record_batches(batches: Vec<RecordBatch>) -> Result<RecordBatch, Error> {
-    if let Some(batch0) = batches.first() {
-        let schema = batch0.schema();
-
-        let batch = concat_batches(&schema, &batches)?;
-
-        Ok(batch)
-    } else {
-        Ok(RecordBatch::new_empty(Arc::new(Schema::empty())))
-    }
 }

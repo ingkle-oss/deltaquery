@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use duckdb::{params, Connection};
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
+use std::sync::Arc;
 use url::Url;
 
 pub struct DQDuckDBCompute {
@@ -50,7 +51,7 @@ impl DQComputeSession for DQDuckDBComputeSession {
         &self,
         statement: &Statement,
         state: DQStateRef,
-    ) -> Result<Vec<RecordBatch>, Error> {
+    ) -> Result<Arc<Vec<RecordBatch>>, Error> {
         match statement {
             Statement::Query(query) => {
                 if let SetExpr::Select(select) = query.body.as_ref() {
@@ -96,7 +97,7 @@ impl DQComputeSession for DQDuckDBComputeSession {
                                     let batches =
                                         stmt.query_arrow([])?.collect::<Vec<RecordBatch>>();
 
-                                    return Ok(batches);
+                                    return Ok(Arc::new(batches));
                                 }
                             }
                             _ => {

@@ -70,7 +70,7 @@ pub struct FlightSqlServiceSingle {
     compression: Option<CompressionType>,
     endpoint: String,
 
-    handles: Arc<Mutex<HashMap<String, Vec<RecordBatch>>>>,
+    handles: Arc<Mutex<HashMap<String, Arc<Vec<RecordBatch>>>>>,
 }
 
 impl FlightSqlServiceSingle {

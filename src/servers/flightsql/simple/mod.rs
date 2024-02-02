@@ -702,6 +702,7 @@ impl FlightSqlService for FlightSqlServiceSimple {
         let batch = Self::get_dummy_batch().map_err(to_tonic_error)?;
         let schema = batch.schema();
         let batches = vec![batch];
+        let batches = Arc::new(batches);
         let flight_data =
             flight::batches_to_flight_data(schema.as_ref(), batches, Some(CompressionType::ZSTD))
                 .map_err(|e| status!("Could not convert batches", e))?
