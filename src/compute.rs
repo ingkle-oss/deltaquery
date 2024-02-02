@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use sqlparser::ast::Statement;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[allow(missing_docs)]
@@ -45,7 +46,7 @@ pub trait DQComputeSession: Send + Sync {
         &self,
         statement: &Statement,
         state: DQStateRef,
-    ) -> Result<Vec<RecordBatch>, Error>;
+    ) -> Result<Arc<Vec<RecordBatch>>, Error>;
 }
 
 #[async_trait]
