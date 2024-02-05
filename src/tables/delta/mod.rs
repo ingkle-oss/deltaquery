@@ -323,6 +323,10 @@ impl DQTable for DQDeltaTable {
         Some(self.schema.clone())
     }
 
+    fn location(&self) -> &String {
+        &self.location
+    }
+
     fn partition_columns(&self) -> Option<&Vec<String>> {
         self.predicates.as_ref()
     }
