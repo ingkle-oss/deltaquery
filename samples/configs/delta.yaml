@@ -22,7 +22,6 @@ tables:
     storage: "delta"
     filesystem: "minio"
     location: "s3://test0/"
-    predicates: "date,hour"
   - name: "delta.default.test1"
     storage: "delta"
     filesystem: "minio"
@@ -30,4 +29,3 @@ tables:
   - name: "delta.default.local"
     storage: "delta"
     location: "/Users/haruband/Documents/deltaquery/samples/samples/delta/"
-    predicates: "date,hour"
