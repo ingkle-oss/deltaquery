@@ -3,6 +3,7 @@ use crate::configs::DQComputeConfig;
 use crate::state::{DQComputeSessionRef, DQState, DQStateRef};
 use anyhow::{anyhow, Error};
 use arrow::array::RecordBatch;
+use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
 use duckdb::{params, Connection};
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
@@ -47,6 +48,10 @@ impl DQDuckDBComputeSession {
 
 #[async_trait]
 impl DQComputeSession for DQDuckDBComputeSession {
+    async fn schema(&self, _statement: &Statement, _state: DQStateRef) -> Result<SchemaRef, Error> {
+        Ok(Arc::new(Schema::empty()))
+    }
+
     async fn execute(
         &self,
         statement: &Statement,
