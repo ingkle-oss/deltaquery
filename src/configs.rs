@@ -34,7 +34,6 @@ pub struct DQTableConfig {
     pub storage: Option<String>,
     pub filesystem: Option<String>,
     pub location: Option<String>,
-    pub predicates: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]

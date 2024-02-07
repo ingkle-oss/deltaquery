@@ -38,10 +38,10 @@ pub struct DQDeltaTable {
     store: LogStoreRef,
 
     location: String,
-    predicates: Option<Vec<String>>,
 
     version: i64,
-    schema: SchemaRef,
+    schema: Option<SchemaRef>,
+    partitions: Option<Vec<String>>,
 
     protocol: Protocol,
     metadata: Metadata,
@@ -76,34 +76,14 @@ impl DQDeltaTable {
 
         let store = logstore_for(ensure_table_uri(&location)?, filesystem_options.clone())?;
 
-        let predicates = match table_config.predicates.as_ref() {
-            Some(predicates) => {
-                if predicates.is_empty() {
-                    None
-                } else {
-                    let predicates = predicates
-                        .split(",")
-                        .map(|field| field.to_string())
-                        .collect::<Vec<String>>();
-
-                    if predicates.len() > 0 {
-                        Some(predicates)
-                    } else {
-                        None
-                    }
-                }
-            }
-            None => None,
-        };
-
         Ok(DQDeltaTable {
             store,
             location,
             version: -1,
-            predicates: predicates,
             protocol: Protocol::default(),
             metadata: Metadata::default(),
-            schema: Arc::new(Schema::empty()),
+            schema: None,
+            partitions: None,
             files: HashMap::new(),
             stats: Vec::new(),
             use_versioning: storage_options.get("use_versioning").map_or(false, |v| {
@@ -156,7 +136,8 @@ impl DQDeltaTable {
                 self.protocol = protocol.clone();
             } else if let Action::Metadata(metadata) = action {
                 self.metadata = metadata.clone();
-                self.schema = Arc::new(Schema::try_from(&metadata.schema()?)?);
+                self.schema = Some(Arc::new(Schema::try_from(&metadata.schema()?)?));
+                self.partitions = Some(metadata.partition_columns.clone());
             }
         }
 
@@ -164,21 +145,23 @@ impl DQDeltaTable {
     }
 
     fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), Error> {
-        let batch = statistics::get_record_batch_from_actions(
-            &actions,
-            &self.schema,
-            self.predicates.as_ref(),
-            self.timestamp_field.as_ref(),
-            &self.timestamp_template,
-            &self.timestamp_duration,
-        )?;
-        self.stats.push(batch);
+        if let (Some(schema), Some(partitions)) = (&self.schema, &self.partitions) {
+            let batch = statistics::get_record_batch_from_actions(
+                &actions,
+                schema,
+                partitions,
+                self.timestamp_field.as_ref(),
+                &self.timestamp_template,
+                &self.timestamp_duration,
+            )?;
+            self.stats.push(batch);
 
-        if self.stats.len() > self.max_stats_batches {
-            self.stats = vec![arrow::compute::concat_batches(
-                &self.stats.first().unwrap().schema(),
-                &self.stats,
-            )?];
+            if self.stats.len() > self.max_stats_batches {
+                self.stats = vec![arrow::compute::concat_batches(
+                    &self.stats.first().unwrap().schema(),
+                    &self.stats,
+                )?];
+            }
         }
 
         Ok(())
@@ -320,15 +303,15 @@ impl DQTable for DQDeltaTable {
     }
 
     fn schema(&self) -> Option<SchemaRef> {
-        Some(self.schema.clone())
+        self.schema.clone()
+    }
+
+    fn partition_columns(&self) -> Option<&Vec<String>> {
+        self.partitions.as_ref()
     }
 
     fn location(&self) -> &String {
         &self.location
-    }
-
-    fn partition_columns(&self) -> Option<&Vec<String>> {
-        self.predicates.as_ref()
     }
 
     fn filesystem_options(&self) -> &HashMap<String, String> {
@@ -409,7 +392,6 @@ mod tests {
             storage: None,
             filesystem: None,
             location: None,
-            predicates: None,
         };
 
         let mut storage = DQDeltaTable::try_new(&table_config, None, None)
@@ -452,7 +434,6 @@ mod tests {
             storage: None,
             filesystem: None,
             location: None,
-            predicates: None,
         };
         let mut storage = DQDeltaTable::try_new(&table_config, None, None)
             .await

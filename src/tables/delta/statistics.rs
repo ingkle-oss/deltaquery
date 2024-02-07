@@ -123,19 +123,16 @@ fn get_scalar_value(
 pub fn get_record_batch_from_actions(
     actions: &Vec<Action>,
     schema: &SchemaRef,
-    predicates: Option<&Vec<String>>,
+    partitions: &Vec<String>,
     timestamp_field: Option<&String>,
     timestamp_template: &String,
     timestamp_duration: &Duration,
 ) -> Result<RecordBatch, Error> {
-    let fields0 = match predicates {
-        Some(predicates) => schema
-            .fields()
-            .iter()
-            .filter(|field| predicates.contains(field.name()))
-            .collect::<Vec<&FieldRef>>(),
-        None => schema.fields().iter().collect::<Vec<&FieldRef>>(),
-    };
+    let fields0 = schema
+        .fields()
+        .iter()
+        .filter(|field| partitions.contains(field.name()))
+        .collect::<Vec<&FieldRef>>();
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
     let mut fields = Vec::new();
 
