@@ -145,18 +145,19 @@ pub fn parse_expression(
             }
         }
         sqlparser::ast::Expr::Value(value) => match value {
-            sqlparser::ast::Value::Number(n, l) => {
-                if *l {
-                    Some(Expr::Literal(ScalarValue::Int64(Some(
-                        n.parse::<i64>().expect("could not parse int64"),
-                    ))))
+            sqlparser::ast::Value::Number(n, _) => {
+                if let Ok(l) = n.parse::<i64>() {
+                    Some(Expr::Literal(ScalarValue::Int64(Some(l))))
+                } else if let Ok(l) = n.parse::<u64>() {
+                    Some(Expr::Literal(ScalarValue::UInt64(Some(l))))
+                } else if let Ok(l) = n.parse::<f64>() {
+                    Some(Expr::Literal(ScalarValue::Float64(Some(l))))
                 } else {
-                    Some(Expr::Literal(ScalarValue::Int32(Some(
-                        n.parse::<i32>().expect("could not parse int32"),
-                    ))))
+                    unimplemented!()
                 }
             }
-            sqlparser::ast::Value::SingleQuotedString(s) => {
+            sqlparser::ast::Value::SingleQuotedString(s)
+            | sqlparser::ast::Value::DoubleQuotedString(s) => {
                 if let Some(other) = other {
                     if let Some((_, field)) = fields.find(get_column_name_from_expression(other)) {
                         match field.data_type() {
