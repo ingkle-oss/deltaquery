@@ -4,6 +4,17 @@ use datafusion::common::scalar::ScalarValue;
 use datafusion::common::Column;
 use datafusion::logical_expr::{Cast, Expr};
 
+fn get_column_name_from_expression(expr: &Expr) -> &String {
+    match expr {
+        Expr::Column(column) => &column.name,
+        Expr::Cast(cast) => match cast.expr.as_ref() {
+            Expr::Column(column) => &column.name,
+            _ => unimplemented!(),
+        },
+        _ => unimplemented!(),
+    }
+}
+
 pub fn parse_expression(
     predicates: &sqlparser::ast::Expr,
     fields: &Fields,
@@ -14,7 +25,7 @@ pub fn parse_expression(
         sqlparser::ast::Expr::BinaryOp { left, op, right } => match op {
             sqlparser::ast::BinaryOperator::And => {
                 let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, left.as_ref());
+                let right = parse_expression(right, fields, use_max, None);
 
                 match (left, right) {
                     (Some(left), Some(right)) => Some(left.and(right)),
@@ -25,7 +36,7 @@ pub fn parse_expression(
             }
             sqlparser::ast::BinaryOperator::Or => {
                 let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, left.as_ref());
+                let right = parse_expression(right, fields, use_max, None);
 
                 match (left, right) {
                     (Some(left), Some(right)) => Some(left.or(right)),
@@ -154,7 +165,7 @@ pub fn parse_expression(
             }
             sqlparser::ast::Value::SingleQuotedString(s) => {
                 if let Some(other) = other {
-                    if let Some((_, field)) = fields.find(&other.to_string()) {
+                    if let Some((_, field)) = fields.find(get_column_name_from_expression(other)) {
                         match field.data_type() {
                             DataType::Timestamp(unit, None) => {
                                 let mut literal = None;
