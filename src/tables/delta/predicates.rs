@@ -59,8 +59,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Lt => {
-                let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, left.as_ref());
+                let left = parse_expression(left, fields, false, None);
+                let right = parse_expression(right, fields, false, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.lt(right))
@@ -69,8 +69,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::LtEq => {
-                let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, left.as_ref());
+                let left = parse_expression(left, fields, false, None);
+                let right = parse_expression(right, fields, false, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.lt_eq(right))
@@ -79,8 +79,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Gt => {
-                let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, left.as_ref());
+                let left = parse_expression(left, fields, true, None);
+                let right = parse_expression(right, fields, true, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.gt(right))
@@ -89,8 +89,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::GtEq => {
-                let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, left.as_ref());
+                let left = parse_expression(left, fields, true, None);
+                let right = parse_expression(right, fields, true, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.gt_eq(right))
