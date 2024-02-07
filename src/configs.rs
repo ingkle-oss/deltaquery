@@ -39,8 +39,6 @@ pub struct DQTableConfig {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQMetastoreConfig {
     pub url: String,
-
-    pub tables: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]

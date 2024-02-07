@@ -1,9 +1,8 @@
 use crate::compute::{create_compute_using_factory, DQCompute, DQComputeError, DQComputeSession};
-use crate::configs::{DQConfig, DQTableConfig};
+use crate::configs::DQConfig;
+use crate::metastore::DQMetastore;
 use crate::table::{create_table_using_factory, DQTable};
 use anyhow::{anyhow, Error};
-use sqlx::postgres::PgPoolOptions;
-use sqlx::{Pool, Postgres};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -20,20 +19,13 @@ pub struct DQState {
 
     tables: HashMap<String, DQTableRef>,
 
-    pool: Option<Pool<Postgres>>,
+    metastore: Option<DQMetastore>,
 }
 
 impl DQState {
     pub async fn try_new(config: DQConfig) -> Result<Self, Error> {
-        let pool = match config.metastore.as_ref() {
-            Some(metastore) => {
-                let pool = PgPoolOptions::new()
-                    .max_connections(5)
-                    .connect(metastore.url.as_str())
-                    .await?;
-
-                Some(pool)
-            }
+        let metastore = match config.metastore.as_ref() {
+            Some(metastore) => Some(DQMetastore::try_new(metastore).await?),
             None => None,
         };
 
@@ -41,7 +33,7 @@ impl DQState {
             config,
             compute: None,
             tables: HashMap::new(),
-            pool,
+            metastore,
         })
     }
 
@@ -134,20 +126,8 @@ impl DQState {
     pub async fn rebuild_tables(state: DQStateRef) {
         let mut state = state.lock().await;
 
-        if let (Some(pool), Some(metastore)) =
-            (state.pool.as_ref(), state.config.metastore.as_ref())
-        {
-            match sqlx::query_as::<_, DQTableConfig>(
-                format!(
-                    "SELECT {} FROM {}",
-                    DQTableConfig::FIELD_NAMES_AS_ARRAY.join(","),
-                    metastore.tables
-                )
-                .as_str(),
-            )
-            .fetch_all(pool)
-            .await
-            {
+        if let Some(metastore) = &state.metastore {
+            match metastore.get_tables().await {
                 Ok(tables) => {
                     let indices0: Vec<usize> = (0..state.config.tables.len()).rev().collect();
                     let mut indices1 = Vec::new();
