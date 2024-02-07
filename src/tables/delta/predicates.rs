@@ -1,5 +1,4 @@
-use arrow::datatypes::{DataType, Fields, TimeUnit};
-use chrono::NaiveDateTime;
+use arrow::datatypes::{DataType, Fields};
 use datafusion::common::scalar::ScalarValue;
 use datafusion::common::Column;
 use datafusion::logical_expr::{Cast, Expr};
@@ -137,14 +136,8 @@ pub fn parse_expression(
                 name
             };
 
-            if let Some((_, field)) = fields.find(&column) {
-                let expr = match field.data_type() {
-                    DataType::Date32 | DataType::Date64 => Expr::Cast(Cast::new(
-                        Box::new(Expr::Column(Column::from_name(column))),
-                        DataType::Utf8,
-                    )),
-                    _ => Expr::Column(Column::from_name(column)),
-                };
+            if let Some((_, _)) = fields.find(&column) {
+                let expr = Expr::Column(Column::from_name(column));
 
                 Some(expr)
             } else {
@@ -167,57 +160,13 @@ pub fn parse_expression(
                 if let Some(other) = other {
                     if let Some((_, field)) = fields.find(get_column_name_from_expression(other)) {
                         match field.data_type() {
-                            DataType::Timestamp(unit, None) => {
-                                let mut literal = None;
-
-                                let formats = vec![
-                                    "%Y-%m-%dT%H:%M:%S%.fZ",
-                                    "%Y-%m-%dT%H:%M:%S%.f",
-                                    "%Y-%m-%dT%H:%M:%S%z",
-                                    "%Y-%m-%dT%H:%M:%S",
-                                    "%Y-%m-%d %H:%M:%S%.fZ",
-                                    "%Y-%m-%d %H:%M:%S%.f",
-                                    "%Y-%m-%d %H:%M:%S%z",
-                                    "%Y-%m-%d %H:%M:%S",
-                                    "%Y-%m-%d %H:%M",
-                                ];
-
-                                for format in formats {
-                                    if let Ok(datetime) = NaiveDateTime::parse_from_str(s, format) {
-                                        literal = match unit {
-                                            TimeUnit::Nanosecond => Some(Expr::Literal(
-                                                ScalarValue::TimestampMicrosecond(
-                                                    datetime.timestamp_nanos_opt(),
-                                                    None,
-                                                ),
-                                            )),
-                                            TimeUnit::Microsecond => Some(Expr::Literal(
-                                                ScalarValue::TimestampMicrosecond(
-                                                    Some(datetime.timestamp_micros()),
-                                                    None,
-                                                ),
-                                            )),
-                                            TimeUnit::Millisecond => Some(Expr::Literal(
-                                                ScalarValue::TimestampMillisecond(
-                                                    Some(datetime.timestamp_millis()),
-                                                    None,
-                                                ),
-                                            )),
-                                            TimeUnit::Second => {
-                                                Some(Expr::Literal(ScalarValue::TimestampSecond(
-                                                    Some(datetime.timestamp()),
-                                                    None,
-                                                )))
-                                            }
-                                        };
-
-                                        break;
-                                    }
-                                }
-
-                                literal
+                            DataType::Utf8 => {
+                                Some(Expr::Literal(ScalarValue::Utf8(Some(s.clone()))))
                             }
-                            _ => Some(Expr::Literal(ScalarValue::Utf8(Some(s.clone())))),
+                            other => Some(Expr::Cast(Cast::new(
+                                Box::new(Expr::Literal(ScalarValue::Utf8(Some(s.clone())))),
+                                other.clone(),
+                            ))),
                         }
                     } else {
                         None
