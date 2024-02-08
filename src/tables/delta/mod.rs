@@ -41,7 +41,7 @@ pub struct DQDeltaTable {
 
     version: i64,
     schema: Option<SchemaRef>,
-    partitions: Option<Vec<String>>,
+    partitions: Vec<String>,
 
     protocol: Protocol,
     metadata: Metadata,
@@ -56,6 +56,8 @@ pub struct DQDeltaTable {
     timestamp_duration: Duration,
 
     filesystem_options: HashMap<String, String>,
+    table_options: HashMap<String, String>,
+    data_format: String,
 }
 
 impl DQDeltaTable {
@@ -83,7 +85,7 @@ impl DQDeltaTable {
             protocol: Protocol::default(),
             metadata: Metadata::default(),
             schema: None,
-            partitions: None,
+            partitions: Vec::new(),
             files: HashMap::new(),
             stats: Vec::new(),
             use_versioning: storage_options.get("use_versioning").map_or(false, |v| {
@@ -104,6 +106,8 @@ impl DQDeltaTable {
                     duration_str::parse_chrono(v).expect("could not parse timestamp_duration")
                 }),
             filesystem_options,
+            table_options: HashMap::new(),
+            data_format: "parquet".into(),
         })
     }
 
@@ -137,7 +141,13 @@ impl DQDeltaTable {
             } else if let Action::Metadata(metadata) = action {
                 self.metadata = metadata.clone();
                 self.schema = Some(Arc::new(Schema::try_from(&metadata.schema()?)?));
-                self.partitions = Some(metadata.partition_columns.clone());
+                self.partitions = metadata.partition_columns.clone();
+                self.table_options = metadata
+                    .configuration
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.as_ref().map_or("".into(), |v| v.clone())))
+                    .collect();
+                self.data_format = metadata.format.provider.clone();
             }
         }
 
@@ -145,11 +155,11 @@ impl DQDeltaTable {
     }
 
     fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), Error> {
-        if let (Some(schema), Some(partitions)) = (&self.schema, &self.partitions) {
+        if let Some(schema) = &self.schema {
             let batch = statistics::get_record_batch_from_actions(
                 &actions,
                 schema,
-                partitions,
+                &self.partitions,
                 self.timestamp_field.as_ref(),
                 &self.timestamp_template,
                 &self.timestamp_duration,
@@ -306,8 +316,8 @@ impl DQTable for DQDeltaTable {
         self.schema.clone()
     }
 
-    fn partition_columns(&self) -> Option<&Vec<String>> {
-        self.partitions.as_ref()
+    fn partition_columns(&self) -> &Vec<String> {
+        &self.partitions
     }
 
     fn location(&self) -> &String {
@@ -316,6 +326,14 @@ impl DQTable for DQDeltaTable {
 
     fn filesystem_options(&self) -> &HashMap<String, String> {
         &self.filesystem_options
+    }
+
+    fn table_options(&self) -> &HashMap<String, String> {
+        &self.table_options
+    }
+
+    fn data_format(&self) -> &String {
+        &self.data_format
     }
 }
 
