@@ -159,7 +159,6 @@ impl DQDeltaTable {
             let batch = statistics::get_record_batch_from_actions(
                 &actions,
                 schema,
-                &self.partitions,
                 self.timestamp_field.as_ref(),
                 &self.timestamp_template,
                 &self.timestamp_duration,

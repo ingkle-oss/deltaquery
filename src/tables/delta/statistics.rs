@@ -1,7 +1,7 @@
 use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::compute::{cast_with_options, CastOptions};
-use arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit};
+use arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use chrono::{DateTime, Duration};
 use datafusion::common::scalar::ScalarValue;
 use datafusion::common::DataFusionError;
@@ -123,16 +123,10 @@ fn get_scalar_value(
 pub fn get_record_batch_from_actions(
     actions: &Vec<Action>,
     schema: &SchemaRef,
-    partitions: &Vec<String>,
     timestamp_field: Option<&String>,
     timestamp_template: &String,
     timestamp_duration: &Duration,
 ) -> Result<RecordBatch, Error> {
-    let fields0 = schema
-        .fields()
-        .iter()
-        .filter(|field| partitions.contains(field.name()))
-        .collect::<Vec<&FieldRef>>();
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
     let mut fields = Vec::new();
 
@@ -172,7 +166,7 @@ pub fn get_record_batch_from_actions(
                 },
                 None => None,
             };
-            for field in &fields0 {
+            for field in schema.fields().iter() {
                 let data_type = field.data_type();
 
                 if partitions.contains_key(field.name()) {
