@@ -17,10 +17,12 @@ pub trait DQTable: Send + Sync {
     async fn insert(&mut self, statement: &Statement) -> Result<(), Error>;
 
     fn schema(&self) -> Option<SchemaRef>;
-    fn partition_columns(&self) -> Option<&Vec<String>>;
+    fn partition_columns(&self) -> &Vec<String>;
 
     fn location(&self) -> &String;
     fn filesystem_options(&self) -> &HashMap<String, String>;
+    fn table_options(&self) -> &HashMap<String, String>;
+    fn data_format(&self) -> &String;
 }
 
 #[async_trait]
