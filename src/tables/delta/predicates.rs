@@ -15,16 +15,18 @@ fn get_column_name_from_expression(expr: &Expr) -> &String {
 }
 
 pub fn parse_expression(
-    predicates: &sqlparser::ast::Expr,
+    tables: &Vec<String>,
+    from: bool,
     fields: &Fields,
+    predicates: &sqlparser::ast::Expr,
     use_max: bool,
     other: Option<&Expr>,
 ) -> Option<Expr> {
     match predicates {
         sqlparser::ast::Expr::BinaryOp { left, op, right } => match op {
             sqlparser::ast::BinaryOperator::And => {
-                let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, None);
+                let left = parse_expression(tables, from, fields, left, use_max, None);
+                let right = parse_expression(tables, from, fields, right, use_max, None);
 
                 match (left, right) {
                     (Some(left), Some(right)) => Some(left.and(right)),
@@ -34,8 +36,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Or => {
-                let left = parse_expression(left, fields, use_max, None);
-                let right = parse_expression(right, fields, use_max, None);
+                let left = parse_expression(tables, from, fields, left, use_max, None);
+                let right = parse_expression(tables, from, fields, right, use_max, None);
 
                 match (left, right) {
                     (Some(left), Some(right)) => Some(left.or(right)),
@@ -43,9 +45,9 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Eq => {
-                let min = parse_expression(left, fields, false, None);
-                let max = parse_expression(left, fields, true, None);
-                let right = parse_expression(right, fields, false, min.as_ref());
+                let min = parse_expression(tables, from, fields, left, false, None);
+                let max = parse_expression(tables, from, fields, left, true, None);
+                let right = parse_expression(tables, from, fields, right, false, min.as_ref());
 
                 if let (Some(min), Some(max), Some(right)) = (min, max, right) {
                     if min == max {
@@ -58,8 +60,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Lt => {
-                let left = parse_expression(left, fields, false, None);
-                let right = parse_expression(right, fields, false, left.as_ref());
+                let left = parse_expression(tables, from, fields, left, false, None);
+                let right = parse_expression(tables, from, fields, right, false, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.lt(right))
@@ -68,8 +70,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::LtEq => {
-                let left = parse_expression(left, fields, false, None);
-                let right = parse_expression(right, fields, false, left.as_ref());
+                let left = parse_expression(tables, from, fields, left, false, None);
+                let right = parse_expression(tables, from, fields, right, false, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.lt_eq(right))
@@ -78,8 +80,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::Gt => {
-                let left = parse_expression(left, fields, true, None);
-                let right = parse_expression(right, fields, true, left.as_ref());
+                let left = parse_expression(tables, from, fields, left, true, None);
+                let right = parse_expression(tables, from, fields, right, true, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.gt(right))
@@ -88,8 +90,8 @@ pub fn parse_expression(
                 }
             }
             sqlparser::ast::BinaryOperator::GtEq => {
-                let left = parse_expression(left, fields, true, None);
-                let right = parse_expression(right, fields, true, left.as_ref());
+                let left = parse_expression(tables, from, fields, left, true, None);
+                let right = parse_expression(tables, from, fields, right, true, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
                     Some(left.gt_eq(right))
@@ -105,10 +107,10 @@ pub fn parse_expression(
             low,
             high,
         } => {
-            let min = parse_expression(expr, fields, false, None);
-            let max = parse_expression(expr, fields, true, None);
-            let low = parse_expression(low, fields, use_max, min.as_ref());
-            let high = parse_expression(high, fields, use_max, max.as_ref());
+            let min = parse_expression(tables, from, fields, expr, false, None);
+            let max = parse_expression(tables, from, fields, expr, true, None);
+            let low = parse_expression(tables, from, fields, low, use_max, min.as_ref());
+            let high = parse_expression(tables, from, fields, high, use_max, max.as_ref());
 
             if let (Some(min), Some(max), Some(low), Some(high)) = (min, max, low, high) {
                 if *negated {
@@ -121,25 +123,67 @@ pub fn parse_expression(
             }
         }
         sqlparser::ast::Expr::Identifier(ident) => {
-            let name = ident.value.clone();
-            let column = if use_max {
-                let name_max = [&name, "max"].join(".");
-                if fields
-                    .iter()
-                    .any(|field| field.name() == &name_max.as_str())
-                {
-                    name_max
+            if from {
+                let name = ident.value.clone();
+                let column = if use_max {
+                    let name_max = [&name, "max"].join(".");
+                    if fields
+                        .iter()
+                        .any(|field| field.name() == &name_max.as_str())
+                    {
+                        name_max
+                    } else {
+                        name
+                    }
                 } else {
                     name
+                };
+
+                if let Some((_, _)) = fields.find(&column) {
+                    let expr = Expr::Column(Column::from_name(column));
+
+                    Some(expr)
+                } else {
+                    None
                 }
             } else {
-                name
-            };
+                None
+            }
+        }
+        sqlparser::ast::Expr::CompoundIdentifier(idents) => {
+            if let Some(field) = idents.last() {
+                let target = idents.as_slice()[0..idents.len() - 1]
+                    .iter()
+                    .map(|ident| ident.value.clone())
+                    .collect::<Vec<_>>()
+                    .join(".");
 
-            if let Some((_, _)) = fields.find(&column) {
-                let expr = Expr::Column(Column::from_name(column));
+                if tables.contains(&target) {
+                    let name = field.value.clone();
+                    let column = if use_max {
+                        let name_max = [&name, "max"].join(".");
+                        if fields
+                            .iter()
+                            .any(|field| field.name() == &name_max.as_str())
+                        {
+                            name_max
+                        } else {
+                            name
+                        }
+                    } else {
+                        name
+                    };
 
-                Some(expr)
+                    if let Some((_, _)) = fields.find(&column) {
+                        let expr = Expr::Column(Column::from_name(column));
+
+                        Some(expr)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             } else {
                 None
             }

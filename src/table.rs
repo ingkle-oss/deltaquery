@@ -16,6 +16,8 @@ pub trait DQTable: Send + Sync {
     async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, Error>;
     async fn insert(&mut self, statement: &Statement) -> Result<(), Error>;
 
+    fn name(&self) -> &String;
+
     fn schema(&self) -> Option<SchemaRef>;
     fn partition_columns(&self) -> &Vec<String>;
 
