@@ -8,7 +8,9 @@ use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
 use chrono::Duration;
 use datafusion::common::cast::as_string_array;
+use datafusion::common::scalar::ScalarValue;
 use datafusion::common::ToDFSchema;
+use datafusion::logical_expr::Expr;
 use datafusion::physical_expr::create_physical_expr;
 use datafusion::physical_expr::execution_props::ExecutionProps;
 use deltalake::kernel::{Action, Add, Metadata, Protocol};
@@ -16,7 +18,7 @@ use deltalake::logstore::logstore_for;
 use deltalake::logstore::LogStoreRef;
 use deltalake::table::builder::ensure_table_uri;
 use deltalake::ObjectStoreError;
-use sqlparser::ast::{SetExpr, Statement};
+use sqlparser::ast::{SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -35,6 +37,8 @@ struct DQDeltaFile {
 }
 
 pub struct DQDeltaTable {
+    name: String,
+
     store: LogStoreRef,
 
     location: String,
@@ -79,6 +83,7 @@ impl DQDeltaTable {
         let store = logstore_for(ensure_table_uri(&location)?, filesystem_options.clone())?;
 
         Ok(DQDeltaTable {
+            name: table_config.name.clone(),
             store,
             location,
             version: -1,
@@ -245,17 +250,91 @@ impl DQTable for DQDeltaTable {
 
                     if let (Some(selection), Some(batch0)) = (&select.selection, self.stats.first())
                     {
-                        if let Some(expressions) = predicates::parse_expression(
-                            &selection,
-                            &batch0.schema().fields(),
-                            false,
-                            None,
-                        ) {
-                            log::info!("filters={:#?}", expressions);
+                        let mut expressions = Vec::new();
 
+                        for table in &select.from {
+                            match &table.relation {
+                                TableFactor::Table { name, alias, .. } => {
+                                    let source = name
+                                        .0
+                                        .iter()
+                                        .map(|o| o.value.clone())
+                                        .collect::<Vec<String>>();
+                                    let source = source.join(".");
+
+                                    if source == self.name {
+                                        let mut tables = vec![source];
+
+                                        if let Some(alias) = alias.as_ref() {
+                                            tables.push(alias.name.value.clone());
+                                        }
+
+                                        if let Some(expression) = predicates::parse_expression(
+                                            &tables,
+                                            true,
+                                            &batch0.schema().fields(),
+                                            &selection,
+                                            false,
+                                            None,
+                                        ) {
+                                            expressions.push(expression);
+                                        } else {
+                                            expressions.push(Expr::Literal(ScalarValue::Boolean(
+                                                Some(true),
+                                            )));
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+
+                            for join in &table.joins {
+                                match &join.relation {
+                                    TableFactor::Table { name, alias, .. } => {
+                                        let source = name
+                                            .0
+                                            .iter()
+                                            .map(|o| o.value.clone())
+                                            .collect::<Vec<String>>();
+                                        let source = source.join(".");
+
+                                        if source == self.name {
+                                            let mut tables = vec![source];
+
+                                            if let Some(alias) = alias.as_ref() {
+                                                tables.push(alias.name.value.clone());
+                                            }
+
+                                            if let Some(expression) = predicates::parse_expression(
+                                                &tables,
+                                                false,
+                                                &batch0.schema().fields(),
+                                                &selection,
+                                                false,
+                                                None,
+                                            ) {
+                                                expressions.push(expression);
+                                            } else {
+                                                expressions.push(Expr::Literal(
+                                                    ScalarValue::Boolean(Some(true)),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+
+                        log::info!("filters[{}]={:#?}", self.name, expressions);
+
+                        if !expressions.is_empty() {
                             let schema = batch0.schema();
                             let predicates = create_physical_expr(
-                                &expressions,
+                                &expressions
+                                    .into_iter()
+                                    .reduce(|a, b| a.or(b))
+                                    .expect("could not merge expressions"),
                                 &schema.clone().to_dfschema()?,
                                 &schema,
                                 &ExecutionProps::new(),
@@ -301,14 +380,22 @@ impl DQTable for DQDeltaTable {
 
         files.sort_by(|a, b| a.rank.cmp(&b.rank));
 
-        Ok(files
+        let files = files
             .iter()
             .map(|file| format!("{}/{}", self.location, file.add.path))
-            .collect())
+            .collect();
+
+        log::debug!("files[{}]={:#?}", self.name, files);
+
+        Ok(files)
     }
 
     async fn insert(&mut self, _statement: &Statement) -> Result<(), Error> {
         Ok(())
+    }
+
+    fn name(&self) -> &String {
+        &self.name
     }
 
     fn schema(&self) -> Option<SchemaRef> {
