@@ -50,6 +50,9 @@ sqlparser = { version = "0.39", features = ["serde", "visitor"] }
 deltalake = { git = "https://github.com/haruband/delta-rs", branch = "nazare", features = ["default", "datafusion", "s3"] }
 datafusion = { git = "https://github.com/haruband/arrow-datafusion" }
 object_store = { version = "0.8" }
+aws-config = { version = "1" }
+aws-credential-types = { version = "1" }
+aws-sdk-s3 = { version = "1" }
 
 [dev-dependencies]
 fake = "2.6"

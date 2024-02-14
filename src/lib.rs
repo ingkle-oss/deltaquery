@@ -4,6 +4,8 @@ pub mod computes;
 pub mod configs;
 pub mod metastore;
 pub mod servers;
+pub mod signer;
+pub mod signers;
 pub mod state;
 pub mod table;
 pub mod tables;
