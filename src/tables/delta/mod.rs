@@ -1,12 +1,14 @@
 use crate::commons::delta;
 use crate::configs::{DQFilesystemConfig, DQStorageConfig, DQTableConfig};
+use crate::signer::DQSigner;
+use crate::signers::s3::DQS3Signer;
 use crate::table::{DQTable, DQTableFactory};
 use anyhow::Error;
 use arrow::array::cast::AsArray;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
-use chrono::Duration;
+use chrono::Duration as ChronoDuration;
 use datafusion::common::cast::as_string_array;
 use datafusion::common::scalar::ScalarValue;
 use datafusion::common::ToDFSchema;
@@ -21,6 +23,8 @@ use deltalake::ObjectStoreError;
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
+use url::Url;
 
 mod predicates;
 mod statistics;
@@ -57,11 +61,14 @@ pub struct DQDeltaTable {
 
     timestamp_field: Option<String>,
     timestamp_template: String,
-    timestamp_duration: Duration,
+    timestamp_duration: ChronoDuration,
 
     filesystem_options: HashMap<String, String>,
     table_options: HashMap<String, String>,
     data_format: String,
+
+    signer: Option<Box<dyn DQSigner>>,
+    presigned_url_expiration: Duration,
 }
 
 impl DQDeltaTable {
@@ -81,6 +88,14 @@ impl DQDeltaTable {
         };
 
         let store = logstore_for(ensure_table_uri(&location)?, filesystem_options.clone())?;
+
+        let signer: Option<Box<dyn DQSigner>> = match Url::parse(&location) {
+            Ok(url) => match url.scheme() {
+                "s3" => Some(Box::new(DQS3Signer::try_new(&filesystem_options).await?)),
+                _ => None,
+            },
+            Err(_) => None,
+        };
 
         Ok(DQDeltaTable {
             name: table_config.name.clone(),
@@ -107,12 +122,18 @@ impl DQDeltaTable {
                 }),
             timestamp_duration: storage_options
                 .get("timestamp_duration")
-                .map_or(Duration::hours(1), |v| {
+                .map_or(ChronoDuration::hours(1), |v| {
                     duration_str::parse_chrono(v).expect("could not parse timestamp_duration")
                 }),
             filesystem_options,
             table_options: HashMap::new(),
             data_format: "parquet".into(),
+            signer,
+            presigned_url_expiration: storage_options
+                .get("presigned_url_expiration")
+                .map_or(Duration::from_secs(30), |v| {
+                    duration_str::parse(v).expect("could not parse presigned_url_expiration")
+                }),
         })
     }
 
@@ -392,6 +413,32 @@ impl DQTable for DQDeltaTable {
 
     async fn insert(&mut self, _statement: &Statement) -> Result<(), Error> {
         Ok(())
+    }
+
+    async fn sign(&self, files: &Vec<String>) -> Result<Vec<String>, Error> {
+        if let Some(signer) = &self.signer {
+            let mut urls = Vec::new();
+
+            for file in files {
+                let url = Url::parse(file)?;
+
+                if let Some(bucket) = url.host() {
+                    let url = signer
+                        .sign(
+                            &bucket.to_string(),
+                            url.path(),
+                            self.presigned_url_expiration,
+                        )
+                        .await?;
+
+                    urls.push(url);
+                }
+            }
+
+            Ok(urls)
+        } else {
+            Ok(files.clone())
+        }
     }
 
     fn name(&self) -> &String {
