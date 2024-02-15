@@ -49,10 +49,18 @@ pub struct DQTlsConfig {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct DQRuntimeConfig {
+    pub worker_threads: Option<usize>,
+    pub blocking_threads: Option<usize>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQConfig {
     pub version: i32,
     pub server: String,
     pub listen: String,
+
+    pub runtime: Option<DQRuntimeConfig>,
 
     pub metastore: Option<DQMetastoreConfig>,
     pub tls: Option<DQTlsConfig>,
