@@ -42,8 +42,6 @@ pub trait DQCompute: Send + Sync {
 
 #[async_trait]
 pub trait DQComputeSession: Send + Sync {
-    async fn schema(&self, statement: &Statement, state: DQStateRef) -> Result<SchemaRef, Error>;
-
     async fn execute(
         &self,
         statement: &Statement,
