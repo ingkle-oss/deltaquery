@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use struct_field_names_as_array::FieldNamesAsArray;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQStorageConfig {
@@ -28,8 +27,7 @@ pub struct DQFilesystemConfig {
     pub options: HashMap<String, String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow, FieldNamesAsArray)]
-#[field_names_as_array(visibility = "pub(super)")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct DQTableConfig {
     pub name: String,
     pub r#type: Option<String>,

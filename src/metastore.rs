@@ -21,7 +21,7 @@ impl DQMetastore {
         sqlx::query_as::<_, DQTableConfig>(
             format!(
                 "SELECT {} FROM {}",
-                DQTableConfig::FIELD_NAMES_AS_ARRAY.join(","),
+                ["name", "type", "storage", "filesystem", "location"].join(","),
                 "tables"
             )
             .as_str(),
