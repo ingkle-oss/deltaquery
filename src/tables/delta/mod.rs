@@ -540,9 +540,12 @@ mod tests {
 
         let table_config = DQTableConfig {
             name: "test0".into(),
+            r#type: None,
             storage: None,
             filesystem: None,
             location: None,
+            created_at: None,
+            updated_at: None,
         };
 
         let mut storage = DQDeltaTable::try_new(&table_config, None, None)
@@ -582,9 +585,12 @@ mod tests {
 
         let table_config = DQTableConfig {
             name: "test0".into(),
+            r#type: None,
             storage: None,
             filesystem: None,
             location: None,
+            created_at: None,
+            updated_at: None,
         };
         let mut storage = DQDeltaTable::try_new(&table_config, None, None)
             .await
