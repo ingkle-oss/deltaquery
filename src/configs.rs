@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use struct_field_names_as_array::FieldNamesAsArray;
@@ -31,9 +32,12 @@ pub struct DQFilesystemConfig {
 #[field_names_as_array(visibility = "pub(super)")]
 pub struct DQTableConfig {
     pub name: String,
+    pub r#type: Option<String>,
     pub storage: Option<String>,
     pub filesystem: Option<String>,
     pub location: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
