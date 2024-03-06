@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -34,8 +34,8 @@ pub struct DQTableConfig {
     pub storage: Option<String>,
     pub filesystem: Option<String>,
     pub location: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]

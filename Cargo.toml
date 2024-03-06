@@ -23,8 +23,8 @@ anyhow = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
-chrono = "0"
-chrono-tz = "0.8.3"
+chrono = { version = "0.4.34", features = ["serde"] }
+chrono-tz = { version = "0.8.6" }
 duration-str = "0.7.0"
 arrow = { version = "49", features = ["prettyprint", "ffi"] }
 arrow-cast = { version = "49", features = ["prettyprint"] }
