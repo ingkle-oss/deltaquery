@@ -38,6 +38,14 @@ pub struct DQTableConfig {
     pub updated_at: Option<NaiveDateTime>,
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
+pub struct DQAppConfig {
+    pub name: String,
+    pub password: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQMetastoreConfig {
     pub url: String,

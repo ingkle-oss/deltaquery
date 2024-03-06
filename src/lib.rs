@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod commons;
 pub mod compute;
 pub mod computes;

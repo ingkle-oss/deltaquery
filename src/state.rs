@@ -1,5 +1,5 @@
 use crate::compute::{create_compute_using_factory, DQCompute, DQComputeError, DQComputeSession};
-use crate::configs::DQConfig;
+use crate::configs::{DQAppConfig, DQConfig};
 use crate::metastore::DQMetastore;
 use crate::table::{create_table_using_factory, DQTable};
 use anyhow::{anyhow, Error};
@@ -246,5 +246,17 @@ impl DQState {
         }
 
         Ok(items)
+    }
+
+    pub async fn get_app(state: DQStateRef, name: &str) -> Result<Option<DQAppConfig>, Error> {
+        let state = state.lock().await;
+
+        if let Some(metastore) = &state.metastore {
+            let app = metastore.get_app(name).await?;
+
+            Ok(Some(app))
+        } else {
+            Ok(None)
+        }
     }
 }
