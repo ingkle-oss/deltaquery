@@ -23,8 +23,8 @@ anyhow = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
-chrono = "0"
-chrono-tz = "0.8.3"
+chrono = { version = "0.4.34", features = ["serde"] }
+chrono-tz = { version = "0.8.6" }
 duration-str = "0.7.0"
 arrow = { version = "49", features = ["prettyprint", "ffi"] }
 arrow-cast = { version = "49", features = ["prettyprint"] }
@@ -40,7 +40,6 @@ paste = { version = "1.0" }
 url = "2.3"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 tera = "1.19.0"
-struct-field-names-as-array = "0.2.0"
 local-ip-address = "0.5.6"
 prost = { version = "0.12.1", default-features = false, features = ["prost-derive"] }
 tonic = { version = "0.10.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "gzip"] }

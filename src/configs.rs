@@ -1,7 +1,5 @@
-use chrono::{DateTime, Utc};
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use struct_field_names_as_array::FieldNamesAsArray;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQStorageConfig {
@@ -9,7 +7,7 @@ pub struct DQStorageConfig {
     pub r#type: String,
 
     #[serde(default)]
-    pub options: HashMap<String, String>,
+    pub options: serde_yaml::Value,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -17,7 +15,15 @@ pub struct DQComputeConfig {
     pub r#type: String,
 
     #[serde(default)]
-    pub options: HashMap<String, String>,
+    pub options: serde_yaml::Value,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct DQIdentityConfig {
+    pub r#type: String,
+
+    #[serde(default)]
+    pub options: serde_yaml::Value,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -25,19 +31,26 @@ pub struct DQFilesystemConfig {
     pub name: String,
 
     #[serde(default)]
-    pub options: HashMap<String, String>,
+    pub options: serde_yaml::Value,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow, FieldNamesAsArray)]
-#[field_names_as_array(visibility = "pub(super)")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct DQTableConfig {
     pub name: String,
     pub r#type: Option<String>,
     pub storage: Option<String>,
     pub filesystem: Option<String>,
     pub location: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
+pub struct DQAppConfig {
+    pub name: String,
+    pub password: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -68,6 +81,8 @@ pub struct DQConfig {
 
     pub metastore: Option<DQMetastoreConfig>,
     pub tls: Option<DQTlsConfig>,
+
+    pub identity: Option<DQIdentityConfig>,
 
     pub compute: DQComputeConfig,
 
