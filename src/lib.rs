@@ -1,8 +1,8 @@
-pub mod auth;
 pub mod commons;
 pub mod compute;
 pub mod computes;
 pub mod configs;
+pub mod identity;
 pub mod metastore;
 pub mod servers;
 pub mod signer;

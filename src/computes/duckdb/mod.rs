@@ -1,5 +1,4 @@
 use crate::compute::{DQCompute, DQComputeError, DQComputeFactory, DQComputeSession};
-use crate::configs::DQComputeConfig;
 use crate::state::{DQComputeSessionRef, DQState, DQStateRef};
 use anyhow::{anyhow, Error};
 use arrow::array::RecordBatch;
@@ -15,9 +14,9 @@ pub struct DQDuckDBCompute {
 }
 
 impl DQDuckDBCompute {
-    pub async fn try_new(compute_config: Option<&DQComputeConfig>) -> Result<Self, Error> {
-        let compute_options =
-            compute_config.map_or(HashMap::new(), |config| config.options.clone());
+    pub async fn try_new(compute_options: serde_yaml::Value) -> Result<Self, Error> {
+        let compute_options: HashMap<String, String> =
+            serde_yaml::from_value(compute_options).expect("could not get compute options");
 
         Ok(DQDuckDBCompute { compute_options })
     }
@@ -134,9 +133,9 @@ impl DQDuckDBComputeFactory {
 impl DQComputeFactory for DQDuckDBComputeFactory {
     async fn create(
         &self,
-        compute_config: Option<&DQComputeConfig>,
+        compute_options: serde_yaml::Value,
     ) -> Result<Box<dyn DQCompute>, Error> {
-        Ok(Box::new(DQDuckDBCompute::try_new(compute_config).await?))
+        Ok(Box::new(DQDuckDBCompute::try_new(compute_options).await?))
     }
 }
 

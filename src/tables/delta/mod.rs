@@ -1,5 +1,5 @@
 use crate::commons::delta;
-use crate::configs::{DQFilesystemConfig, DQStorageConfig, DQTableConfig};
+use crate::configs::DQTableConfig;
 use crate::signer::DQSigner;
 use crate::signers::s3::DQS3Signer;
 use crate::table::{DQTable, DQTableFactory};
@@ -74,13 +74,13 @@ pub struct DQDeltaTable {
 impl DQDeltaTable {
     pub async fn try_new(
         table_config: &DQTableConfig,
-        storage_config: Option<&DQStorageConfig>,
-        filesystem_config: Option<&DQFilesystemConfig>,
+        storage_options: serde_yaml::Value,
+        filesystem_options: serde_yaml::Value,
     ) -> Result<Self, Error> {
-        let storage_options =
-            storage_config.map_or(HashMap::new(), |config| config.options.clone());
-        let filesystem_options =
-            filesystem_config.map_or(HashMap::new(), |config| config.options.clone());
+        let storage_options: HashMap<String, String> =
+            serde_yaml::from_value(storage_options).expect("could not get storage options");
+        let filesystem_options: HashMap<String, String> =
+            serde_yaml::from_value(filesystem_options).expect("could not get filesystem options");
 
         let location = match &table_config.location {
             Some(location) => location.trim_end_matches("/").to_string(),
@@ -485,11 +485,11 @@ impl DQTableFactory for DQDeltaTableFactory {
     async fn create(
         &self,
         table_config: &DQTableConfig,
-        storage_config: Option<&DQStorageConfig>,
-        filesystem_config: Option<&DQFilesystemConfig>,
+        storage_options: serde_yaml::Value,
+        filesystem_options: serde_yaml::Value,
     ) -> Result<Box<dyn DQTable>, Error> {
         Ok(Box::new(
-            DQDeltaTable::try_new(table_config, storage_config, filesystem_config).await?,
+            DQDeltaTable::try_new(table_config, storage_options, filesystem_options).await?,
         ))
     }
 }
@@ -548,9 +548,13 @@ mod tests {
             updated_at: None,
         };
 
-        let mut storage = DQDeltaTable::try_new(&table_config, None, None)
-            .await
-            .unwrap();
+        let mut storage = DQDeltaTable::try_new(
+            &table_config,
+            serde_yaml::Value::default(),
+            serde_yaml::Value::default(),
+        )
+        .await
+        .unwrap();
         storage = storage.with_store(log_store.clone());
         storage.update().await.unwrap();
 
@@ -592,9 +596,13 @@ mod tests {
             created_at: None,
             updated_at: None,
         };
-        let mut storage = DQDeltaTable::try_new(&table_config, None, None)
-            .await
-            .unwrap();
+        let mut storage = DQDeltaTable::try_new(
+            &table_config,
+            serde_yaml::Value::default(),
+            serde_yaml::Value::default(),
+        )
+        .await
+        .unwrap();
         storage = storage.with_store(log_store.clone());
 
         let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));

@@ -1,6 +1,5 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQStorageConfig {
@@ -8,7 +7,7 @@ pub struct DQStorageConfig {
     pub r#type: String,
 
     #[serde(default)]
-    pub options: HashMap<String, String>,
+    pub options: serde_yaml::Value,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -16,7 +15,15 @@ pub struct DQComputeConfig {
     pub r#type: String,
 
     #[serde(default)]
-    pub options: HashMap<String, String>,
+    pub options: serde_yaml::Value,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct DQIdentityConfig {
+    pub r#type: String,
+
+    #[serde(default)]
+    pub options: serde_yaml::Value,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -24,7 +31,7 @@ pub struct DQFilesystemConfig {
     pub name: String,
 
     #[serde(default)]
-    pub options: HashMap<String, String>,
+    pub options: serde_yaml::Value,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
@@ -74,6 +81,8 @@ pub struct DQConfig {
 
     pub metastore: Option<DQMetastoreConfig>,
     pub tls: Option<DQTlsConfig>,
+
+    pub identity: Option<DQIdentityConfig>,
 
     pub compute: DQComputeConfig,
 

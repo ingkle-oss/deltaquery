@@ -1,5 +1,6 @@
 use crate::compute::{create_compute_using_factory, DQCompute, DQComputeError, DQComputeSession};
 use crate::configs::{DQAppConfig, DQConfig};
+use crate::identity::{create_identity_using_factory, DQIdentity};
 use crate::metastore::DQMetastore;
 use crate::table::{create_table_using_factory, DQTable};
 use anyhow::{anyhow, Error};
@@ -11,9 +12,12 @@ pub type DQStateRef = Arc<Mutex<DQState>>;
 pub type DQComputeRef = Arc<Mutex<Box<dyn DQCompute>>>;
 pub type DQComputeSessionRef = Box<dyn DQComputeSession>;
 pub type DQTableRef = Arc<Mutex<Box<dyn DQTable>>>;
+pub type DQIdentityRef = Arc<Mutex<Box<dyn DQIdentity>>>;
 
 pub struct DQState {
     config: DQConfig,
+
+    identity: Option<DQIdentityRef>,
 
     compute: Option<DQComputeRef>,
 
@@ -31,10 +35,29 @@ impl DQState {
 
         Ok(DQState {
             config,
+            identity: None,
             compute: None,
             tables: HashMap::new(),
             metastore,
         })
+    }
+
+    pub async fn get_identity(state: DQStateRef) -> Result<Option<DQIdentityRef>, Error> {
+        let mut state = state.lock().await;
+
+        if state.identity.is_none() {
+            if let Some(config) = &state.config.identity {
+                let identity =
+                    create_identity_using_factory(&config.r#type, config.options.clone()).await?;
+                state.identity = Some(Arc::new(Mutex::new(identity)));
+            }
+        }
+
+        if let Some(identity) = state.identity.as_ref() {
+            Ok(Some(identity.clone()))
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn get_compute(state: DQStateRef) -> Result<DQComputeRef, Error> {
@@ -43,7 +66,8 @@ impl DQState {
         if state.compute.is_none() {
             let config = &state.config.compute;
 
-            let compute = create_compute_using_factory(&config.r#type, Some(config)).await?;
+            let compute =
+                create_compute_using_factory(&config.r#type, config.options.clone()).await?;
             state.compute = Some(Arc::new(Mutex::new(compute)));
         }
 
@@ -57,7 +81,8 @@ impl DQState {
         if state.compute.is_none() {
             let config = &state.config.compute;
 
-            let compute = create_compute_using_factory(&config.r#type, Some(config)).await?;
+            let compute =
+                create_compute_using_factory(&config.r#type, config.options.clone()).await?;
             state.compute = Some(Arc::new(Mutex::new(compute)));
         }
 
@@ -89,8 +114,12 @@ impl DQState {
                 let mut table = create_table_using_factory(
                     storage_config.map_or("delta", |config| &config.r#type),
                     table_config,
-                    storage_config,
-                    filesystem_config,
+                    storage_config.map_or(serde_yaml::Value::default(), |config| {
+                        config.options.clone()
+                    }),
+                    filesystem_config.map_or(serde_yaml::Value::default(), |config| {
+                        config.options.clone()
+                    }),
                 )
                 .await?;
                 if let Err(err) = table.update().await {
@@ -257,6 +286,18 @@ impl DQState {
             Ok(Some(app))
         } else {
             Ok(None)
+        }
+    }
+
+    pub async fn has_identity(state: DQStateRef) -> bool {
+        let state = state.lock().await;
+
+        if state.metastore.is_some() {
+            true
+        } else if state.config.identity.is_some() {
+            true
+        } else {
+            false
         }
     }
 }

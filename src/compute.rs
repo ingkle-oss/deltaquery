@@ -1,4 +1,3 @@
-use crate::configs::DQComputeConfig;
 use crate::state::{DQComputeSessionRef, DQStateRef};
 use anyhow::Error;
 use arrow::array::RecordBatch;
@@ -51,10 +50,8 @@ pub trait DQComputeSession: Send + Sync {
 
 #[async_trait]
 pub trait DQComputeFactory: Send + Sync {
-    async fn create(
-        &self,
-        compute_config: Option<&DQComputeConfig>,
-    ) -> Result<Box<dyn DQCompute>, Error>;
+    async fn create(&self, compute_options: serde_yaml::Value)
+        -> Result<Box<dyn DQCompute>, Error>;
 }
 
 pub async fn register_compute_factory(name: &str, factory: Box<dyn DQComputeFactory>) {
@@ -64,10 +61,10 @@ pub async fn register_compute_factory(name: &str, factory: Box<dyn DQComputeFact
 
 pub async fn create_compute_using_factory(
     name: &str,
-    compute_config: Option<&DQComputeConfig>,
+    compute_options: serde_yaml::Value,
 ) -> Result<Box<dyn DQCompute>, Error> {
     let factories = COMPUTE_FACTORIES.lock().await;
     let factory = factories.get(name).expect("could not get compute factory");
-    let compute: Box<dyn DQCompute> = factory.create(compute_config).await?;
+    let compute: Box<dyn DQCompute> = factory.create(compute_options).await?;
     Ok(compute)
 }
