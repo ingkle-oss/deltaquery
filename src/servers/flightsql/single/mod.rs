@@ -1,4 +1,5 @@
 use crate::commons::flight;
+use crate::identity::check_token;
 use crate::servers::flightsql::helpers::{to_tonic_error, FetchResults};
 use crate::state::{DQState, DQStateRef};
 use anyhow::Error;
@@ -131,25 +132,6 @@ impl FlightSqlServiceSingle {
         }
     }
 
-    fn check_token<T>(&self, request: &Request<T>) -> Result<(), Error> {
-        if let Some(authorization) = request.metadata().get("authorization") {
-            let authorization = authorization.to_str()?;
-            if authorization.starts_with(BASIC_AUTHORIZATION_PREFIX) {
-                let payload =
-                    BASE64_STANDARD.decode(&authorization[BASIC_AUTHORIZATION_PREFIX.len()..])?;
-                let payload = String::from_utf8(payload)?;
-                let tokens: Vec<_> = payload.split(':').collect();
-                #[allow(unused_variables)]
-                let (username, password) = match tokens.as_slice() {
-                    [username, password] => (username, password),
-                    _ => (&"none", &"none"),
-                };
-            }
-        }
-
-        Ok(())
-    }
-
     fn parse_sql(&self, sql: &String) -> Result<Vec<Statement>, Error> {
         let dialect = GenericDialect {};
         let statements = Parser::parse_sql(&dialect, sql)?;
@@ -222,7 +204,15 @@ impl FlightSqlService for FlightSqlServiceSingle {
         log::info!("query={:#?}", query);
         log::info!("request={:#?}", request);
 
-        let _ = self.check_token(&request).map_err(to_tonic_error)?;
+        check_token(
+            self.state.clone(),
+            request
+                .metadata()
+                .get("authorization")
+                .map_or("", |value| value.to_str().expect("could not parse header")),
+        )
+        .await
+        .map_err(to_tonic_error)?;
 
         let statements = self.parse_sql(&query.query).map_err(to_tonic_error)?;
         for statement in statements.iter() {
@@ -602,7 +592,15 @@ impl FlightSqlService for FlightSqlServiceSingle {
         log::info!("request={:#?}", request);
         log::info!("message={:#?}", message);
 
-        let _ = self.check_token(&request).map_err(to_tonic_error)?;
+        check_token(
+            self.state.clone(),
+            request
+                .metadata()
+                .get("authorization")
+                .map_or("", |value| value.to_str().expect("could not parse header")),
+        )
+        .await
+        .map_err(to_tonic_error)?;
 
         if let Some(fetch_results) = message.unpack::<FetchResults>().unwrap() {
             let mut handles = self.handles.lock().await;
