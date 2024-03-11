@@ -120,11 +120,10 @@ impl DQDeltaTable {
                 .map_or(String::from("{{ date }} {{ hour }}:00:00 +00:00"), |v| {
                     v.clone()
                 }),
-            timestamp_duration: storage_options
-                .get("timestamp_duration")
-                .map_or(ChronoDuration::hours(1), |v| {
-                    duration_str::parse_chrono(v).expect("could not parse timestamp_duration")
-                }),
+            timestamp_duration: storage_options.get("timestamp_duration").map_or(
+                ChronoDuration::try_hours(1).expect("could not get chrono duration"),
+                |v| duration_str::parse_chrono(v).expect("could not parse timestamp_duration"),
+            ),
             filesystem_options,
             table_options: HashMap::new(),
             data_format: "parquet".into(),
