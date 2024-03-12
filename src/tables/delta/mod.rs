@@ -356,7 +356,6 @@ impl DQTable for DQDeltaTable {
                                     .reduce(|a, b| a.or(b))
                                     .expect("could not merge expressions"),
                                 &schema.clone().to_dfschema()?,
-                                &schema,
                                 &ExecutionProps::new(),
                             )?;
 
