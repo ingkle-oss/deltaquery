@@ -44,7 +44,7 @@ local-ip-address = "0.5.6"
 prost = { version = "0.12.1", default-features = false, features = ["prost-derive"] }
 tonic = { version = "0.10.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "gzip"] }
 sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "json", "chrono"] }
-duckdb = { version = "0.10.1", features = ["appender-arrow"] }
+duckdb = { version = "0.10.1", features = ["appender-arrow"], optional = true }
 sqlparser = { version = "0.39", features = ["serde", "visitor"] }
 deltalake = { git = "https://github.com/haruband/delta-rs", branch = "nazare", features = ["default", "datafusion", "s3"] }
 datafusion = { git = "https://github.com/haruband/arrow-datafusion", branch = "nazare" }
@@ -57,5 +57,6 @@ aws-sdk-s3 = { version = "1" }
 fake = "2.6"
 
 [features]
-default = ["duckdb-bundled"]
+default = ["duckdb", "duckdb-bundled"]
+duckdb = ["dep:duckdb"]
 duckdb-bundled = ["duckdb/bundled", "duckdb/httpfs", "duckdb/parquet"]
