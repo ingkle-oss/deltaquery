@@ -72,20 +72,14 @@ pub struct DQDeltaTable {
 }
 
 impl DQDeltaTable {
-    pub async fn try_new(
-        table_config: &DQTableConfig,
-        storage_options: serde_yaml::Value,
-        filesystem_options: serde_yaml::Value,
-    ) -> Result<Self, Error> {
-        let storage_options: HashMap<String, String> =
-            serde_yaml::from_value(storage_options).expect("could not get storage options");
-        let filesystem_options: HashMap<String, String> =
-            serde_yaml::from_value(filesystem_options).expect("could not get filesystem options");
+    pub async fn try_new(config: &DQTableConfig) -> Result<Self, Error> {
+        let options = config
+            .options
+            .as_deref()
+            .map_or(HashMap::new(), |options| options.clone());
+        let filesystem_options = get_filesystem_options(&options);
 
-        let location = match &table_config.location {
-            Some(location) => location.trim_end_matches("/").to_string(),
-            None => "memory://".into(),
-        };
+        let location = config.location.trim_end_matches("/").to_string();
 
         let store = logstore_for(ensure_table_uri(&location)?, filesystem_options.clone())?;
 
@@ -98,7 +92,7 @@ impl DQDeltaTable {
         };
 
         Ok(DQDeltaTable {
-            name: table_config.name.clone(),
+            name: config.name.clone(),
             store,
             location,
             version: -1,
@@ -108,19 +102,19 @@ impl DQDeltaTable {
             partitions: Vec::new(),
             files: HashMap::new(),
             stats: Vec::new(),
-            use_versioning: storage_options.get("use_versioning").map_or(false, |v| {
+            use_versioning: options.get("use_versioning").map_or(false, |v| {
                 v.parse().expect("could not parse use_versioning")
             }),
-            max_stats_batches: storage_options.get("max_stats_batches").map_or(32, |v| {
+            max_stats_batches: options.get("max_stats_batches").map_or(32, |v| {
                 v.parse().expect("could not parse max_stats_batches")
             }),
-            timestamp_field: storage_options.get("timestamp_field").cloned(),
-            timestamp_template: storage_options
+            timestamp_field: options.get("timestamp_field").cloned(),
+            timestamp_template: options
                 .get("timestamp_template")
                 .map_or(String::from("{{ date }} {{ hour }}:00:00 +00:00"), |v| {
                     v.clone()
                 }),
-            timestamp_duration: storage_options.get("timestamp_duration").map_or(
+            timestamp_duration: options.get("timestamp_duration").map_or(
                 ChronoDuration::try_hours(1).expect("could not get chrono duration"),
                 |v| duration_str::parse_chrono(v).expect("could not parse timestamp_duration"),
             ),
@@ -128,7 +122,7 @@ impl DQDeltaTable {
             table_options: HashMap::new(),
             data_format: "parquet".into(),
             signer,
-            presigned_url_expiration: storage_options
+            presigned_url_expiration: options
                 .get("presigned_url_expiration")
                 .map_or(Duration::from_secs(30), |v| {
                     duration_str::parse(v).expect("could not parse presigned_url_expiration")
@@ -480,15 +474,8 @@ impl DQDeltaTableFactory {
 
 #[async_trait]
 impl DQTableFactory for DQDeltaTableFactory {
-    async fn create(
-        &self,
-        table_config: &DQTableConfig,
-        storage_options: serde_yaml::Value,
-        filesystem_options: serde_yaml::Value,
-    ) -> Result<Box<dyn DQTable>, Error> {
-        Ok(Box::new(
-            DQDeltaTable::try_new(table_config, storage_options, filesystem_options).await?,
-        ))
+    async fn create(&self, config: &DQTableConfig) -> Result<Box<dyn DQTable>, Error> {
+        Ok(Box::new(DQDeltaTable::try_new(config).await?))
     }
 }
 
@@ -536,25 +523,18 @@ mod tests {
         store.put(&tmp_path, commit2).await.unwrap();
         log_store.write_commit_entry(2, &tmp_path).await.unwrap();
 
-        let table_config = DQTableConfig {
+        let config = DQTableConfig {
             name: "test0".into(),
-            r#type: None,
-            storage: None,
-            filesystem: None,
-            location: None,
+            r#type: "external".into(),
+            storage: "delta".into(),
+            location: "memory://".into(),
+            partitions: None,
+            options: None,
             created_at: None,
             updated_at: None,
         };
-
-        let mut storage = DQDeltaTable::try_new(
-            &table_config,
-            serde_yaml::Value::default(),
-            serde_yaml::Value::default(),
-        )
-        .await
-        .unwrap();
+        let mut storage = DQDeltaTable::try_new(&config).await.unwrap();
         storage = storage.with_store(log_store.clone());
-        storage.update().await.unwrap();
 
         let dialect = GenericDialect {};
 
@@ -585,22 +565,17 @@ mod tests {
         store.put(&tmp_path, commit0).await.unwrap();
         log_store.write_commit_entry(0, &tmp_path).await.unwrap();
 
-        let table_config = DQTableConfig {
+        let config = DQTableConfig {
             name: "test0".into(),
-            r#type: None,
-            storage: None,
-            filesystem: None,
-            location: None,
+            r#type: "external".into(),
+            storage: "delta".into(),
+            location: "memory://".into(),
+            partitions: None,
+            options: None,
             created_at: None,
             updated_at: None,
         };
-        let mut storage = DQDeltaTable::try_new(
-            &table_config,
-            serde_yaml::Value::default(),
-            serde_yaml::Value::default(),
-        )
-        .await
-        .unwrap();
+        let mut storage = DQDeltaTable::try_new(&config).await.unwrap();
         storage = storage.with_store(log_store.clone());
 
         let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));
@@ -635,4 +610,16 @@ mod tests {
             2
         );
     }
+}
+
+fn get_filesystem_options(options: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut filesystem_optiosn = HashMap::new();
+
+    for (key, value) in options {
+        if key.starts_with("AWS_") {
+            filesystem_optiosn.insert(key.clone(), value.clone());
+        }
+    }
+
+    filesystem_optiosn
 }

@@ -96,32 +96,8 @@ impl DQState {
         let mut state = state.lock().await;
 
         if !state.tables.contains_key(target) {
-            if let Some(table_config) = state.config.tables.iter().find(|c| &c.name == target) {
-                let storage_config = match &table_config.storage {
-                    Some(name) => state.config.storages.iter().find(|c| &c.name == name),
-                    None => None,
-                };
-                let filesystem_config = if let Some(filesystem) = &table_config.filesystem {
-                    state
-                        .config
-                        .filesystems
-                        .iter()
-                        .find(|c| &c.name == filesystem)
-                } else {
-                    None
-                };
-
-                let mut table = create_table_using_factory(
-                    storage_config.map_or("delta", |config| &config.r#type),
-                    table_config,
-                    storage_config.map_or(serde_yaml::Value::default(), |config| {
-                        config.options.clone()
-                    }),
-                    filesystem_config.map_or(serde_yaml::Value::default(), |config| {
-                        config.options.clone()
-                    }),
-                )
-                .await?;
+            if let Some(config) = state.config.tables.iter().find(|c| &c.name == target) {
+                let mut table = create_table_using_factory(&config.storage, config).await?;
                 if let Err(err) = table.update().await {
                     log::error!("failed to update table: {:?}", err);
                 }
