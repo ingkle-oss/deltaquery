@@ -31,12 +31,7 @@ pub trait DQTable: Send + Sync {
 
 #[async_trait]
 pub trait DQTableFactory: Send + Sync {
-    async fn create(
-        &self,
-        table_config: &DQTableConfig,
-        storage_options: serde_yaml::Value,
-        filesystem_options: serde_yaml::Value,
-    ) -> Result<Box<dyn DQTable>, Error>;
+    async fn create(&self, config: &DQTableConfig) -> Result<Box<dyn DQTable>, Error>;
 }
 
 pub async fn register_table_factory(name: &str, factory: Box<dyn DQTableFactory>) {
@@ -46,14 +41,10 @@ pub async fn register_table_factory(name: &str, factory: Box<dyn DQTableFactory>
 
 pub async fn create_table_using_factory(
     name: &str,
-    table_config: &DQTableConfig,
-    storage_options: serde_yaml::Value,
-    filesystem_options: serde_yaml::Value,
+    config: &DQTableConfig,
 ) -> Result<Box<dyn DQTable>, Error> {
     let factories = TABLE_FACTORIES.lock().await;
     let factory = factories.get(name).expect("could not get table factory");
-    let table: Box<dyn DQTable> = factory
-        .create(table_config, storage_options, filesystem_options)
-        .await?;
+    let table: Box<dyn DQTable> = factory.create(config).await?;
     Ok(table)
 }

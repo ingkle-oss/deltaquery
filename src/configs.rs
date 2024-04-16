@@ -1,14 +1,6 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct DQStorageConfig {
-    pub name: String,
-    pub r#type: String,
-
-    #[serde(default)]
-    pub options: serde_yaml::Value,
-}
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQComputeConfig {
@@ -26,21 +18,16 @@ pub struct DQIdentityConfig {
     pub options: serde_yaml::Value,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct DQFilesystemConfig {
-    pub name: String,
-
-    #[serde(default)]
-    pub options: serde_yaml::Value,
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct DQTableConfig {
     pub name: String,
-    pub r#type: Option<String>,
-    pub storage: Option<String>,
-    pub filesystem: Option<String>,
-    pub location: Option<String>,
+    pub r#type: String,
+    pub storage: String,
+    pub location: String,
+
+    pub partitions: Option<Vec<String>>,
+    pub options: Option<sqlx::types::Json<HashMap<String, String>>>,
+
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -85,12 +72,6 @@ pub struct DQConfig {
     pub identity: Option<DQIdentityConfig>,
 
     pub compute: DQComputeConfig,
-
-    #[serde(default)]
-    pub storages: Vec<DQStorageConfig>,
-
-    #[serde(default)]
-    pub filesystems: Vec<DQFilesystemConfig>,
 
     #[serde(default)]
     pub tables: Vec<DQTableConfig>,
