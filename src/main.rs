@@ -1,6 +1,7 @@
 use anyhow::Error;
 use clap::{Args, Command};
 use deltaquery::compute::register_compute_factory;
+#[cfg(feature = "duckdb")]
 use deltaquery::computes::duckdb::DQDuckDBComputeFactory;
 use deltaquery::configs::DQConfig;
 use deltaquery::servers::flightsql;
@@ -77,6 +78,7 @@ async fn main() -> Result<(), Error> {
     };
 
     register_table_factory("delta", Box::new(DQDeltaTableFactory::new())).await;
+    #[cfg(feature = "duckdb")]
     register_compute_factory("duckdb", Box::new(DQDuckDBComputeFactory::new())).await;
 
     let state = Arc::new(Mutex::new(DQState::try_new(config.clone()).await?));
