@@ -77,15 +77,14 @@ impl DQDeltaTable {
             .options
             .as_deref()
             .map_or(HashMap::new(), |options| options.clone());
-        let filesystem_options = get_filesystem_options(&options);
 
         let location = config.location.trim_end_matches("/").to_string();
 
-        let store = logstore_for(ensure_table_uri(&location)?, filesystem_options.clone())?;
+        let store = logstore_for(ensure_table_uri(&location)?, options.clone())?;
 
         let signer: Option<Box<dyn DQSigner>> = match Url::parse(&location) {
             Ok(url) => match url.scheme() {
-                "s3" => Some(Box::new(DQS3Signer::try_new(&filesystem_options).await?)),
+                "s3" => Some(Box::new(DQS3Signer::try_new(&options).await?)),
                 _ => None,
             },
             Err(_) => None,
@@ -118,7 +117,7 @@ impl DQDeltaTable {
                 ChronoDuration::try_hours(1).expect("could not get chrono duration"),
                 |v| duration_str::parse_chrono(v).expect("could not parse timestamp_duration"),
             ),
-            filesystem_options,
+            filesystem_options: options.clone(),
             table_options: HashMap::new(),
             data_format: "parquet".into(),
             signer,
@@ -610,16 +609,4 @@ mod tests {
             2
         );
     }
-}
-
-fn get_filesystem_options(options: &HashMap<String, String>) -> HashMap<String, String> {
-    let mut filesystem_optiosn = HashMap::new();
-
-    for (key, value) in options {
-        if key.starts_with("AWS_") {
-            filesystem_optiosn.insert(key.clone(), value.clone());
-        }
-    }
-
-    filesystem_optiosn
 }
