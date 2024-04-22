@@ -25,8 +25,9 @@ impl DQMetastore {
                     "name",
                     "type",
                     "storage",
-                    "filesystem",
                     "location",
+                    "partitions",
+                    "options",
                     "created_at",
                     "updated_at"
                 ]
