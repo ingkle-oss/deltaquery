@@ -25,7 +25,7 @@ pub struct DQTableConfig {
     pub storage: String,
     pub location: String,
 
-    pub partitions: Option<Vec<String>>,
+    pub partitions: Option<sqlx::types::Json<Vec<String>>>,
     pub options: Option<sqlx::types::Json<HashMap<String, String>>>,
 
     pub created_at: Option<NaiveDateTime>,
