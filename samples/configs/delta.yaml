@@ -8,24 +8,7 @@ compute:
 storages:
   - name: "delta"
     type: "delta"
-filesystems:
-  - name: "minio"
-    options:
-      AWS_ENDPOINT_URL: "http://127.0.0.1:9000"
-      AWS_REGION: "ap-northeast-2"
-      AWS_ACCESS_KEY_ID: "haruband"
-      AWS_SECRET_ACCESS_KEY: "haru1004"
-      AWS_S3_ALLOW_UNSAFE_RENAME: "true"
-      AWS_ALLOW_HTTP: "true"
 tables:
-  - name: "delta.default.test0"
-    storage: "delta"
-    filesystem: "minio"
-    location: "s3://test0/"
-  - name: "delta.default.test1"
-    storage: "delta"
-    filesystem: "minio"
-    location: "s3://test1/"
   - name: "delta.default.local"
     storage: "delta"
     location: "/Users/haruband/Documents/deltaquery/samples/samples/delta/"
