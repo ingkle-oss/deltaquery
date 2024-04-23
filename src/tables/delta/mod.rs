@@ -73,13 +73,9 @@ pub struct DQDeltaTable {
 
 impl DQDeltaTable {
     pub async fn try_new(config: &DQTableConfig) -> Result<Self, Error> {
-        let options = config
-            .options
-            .as_deref()
-            .map_or(HashMap::new(), |options| options.clone());
+        let options = config.options.clone().unwrap_or(HashMap::new());
 
         let location = config.location.trim_end_matches("/").to_string();
-
         let store = logstore_for(ensure_table_uri(&location)?, options.clone())?;
 
         let signer: Option<Box<dyn DQSigner>> = match Url::parse(&location) {

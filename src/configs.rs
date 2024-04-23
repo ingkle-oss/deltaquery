@@ -18,21 +18,21 @@ pub struct DQIdentityConfig {
     pub options: serde_yaml::Value,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQTableConfig {
     pub name: String,
     pub r#type: String,
     pub storage: String,
     pub location: String,
 
-    pub partitions: Option<sqlx::types::Json<Vec<String>>>,
-    pub options: Option<sqlx::types::Json<HashMap<String, String>>>,
+    pub partitions: Option<Vec<String>>,
+    pub options: Option<HashMap<String, String>>,
 
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, sqlx::FromRow)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct DQAppConfig {
     pub name: String,
     pub password: Option<String>,
