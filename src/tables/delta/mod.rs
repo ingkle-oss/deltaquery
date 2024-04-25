@@ -22,6 +22,7 @@ use deltalake::table::builder::ensure_table_uri;
 use deltalake::ObjectStoreError;
 use sqlparser::ast::{SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
+use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
@@ -73,7 +74,13 @@ pub struct DQDeltaTable {
 
 impl DQDeltaTable {
     pub async fn try_new(config: &DQTableConfig) -> Result<Self, Error> {
-        let options = config.options.clone().unwrap_or(HashMap::new());
+        let mut options = config.options.clone().unwrap_or(HashMap::new());
+
+        for (key, value) in env::vars() {
+            if key.starts_with("AWS_") && !options.contains_key(&key) {
+                options.insert(key, value);
+            }
+        }
 
         let location = config.location.trim_end_matches("/").to_string();
         let store = logstore_for(ensure_table_uri(&location)?, options.clone())?;
