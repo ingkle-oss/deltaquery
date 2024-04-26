@@ -58,8 +58,8 @@ pub async fn check_token(state: DQStateRef, authorization: &str) -> Result<(), E
 
         match DQState::get_app(state.clone(), username).await {
             Ok(Some(app)) => match app.password.as_deref() {
-                Some(password0) => {
-                    if password0 == *password {
+                Some(hashed) => {
+                    if bcrypt::verify(password, hashed)? {
                         Ok(())
                     } else {
                         Err(anyhow!(DQIdentityError::UNAUTHORIZED {

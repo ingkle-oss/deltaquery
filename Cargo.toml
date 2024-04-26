@@ -41,6 +41,7 @@ url = "2.3"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 tera = "1.19.0"
 local-ip-address = "0.5.6"
+bcrypt = "0.15"
 prost = { version = "0.12.1", default-features = false, features = ["prost-derive"] }
 tonic = { version = "0.10.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "gzip"] }
 sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "json", "chrono"] }
