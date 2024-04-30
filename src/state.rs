@@ -235,7 +235,7 @@ impl DQState {
                 if table.name.starts_with(scope) {
                     let fields = table.name.split(".").collect::<Vec<_>>();
 
-                    if let Some(field) = fields.get(2) {
+                    if let Some(field) = fields.last() {
                         items.insert(field.to_string());
                     }
                 }
@@ -244,7 +244,7 @@ impl DQState {
             for table in state.config.tables.iter() {
                 let fields = table.name.split(".").collect::<Vec<_>>();
 
-                if let Some(field) = fields.get(2) {
+                if let Some(field) = fields.last() {
                     items.insert(field.to_string());
                 }
             }
