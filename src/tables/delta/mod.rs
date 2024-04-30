@@ -487,8 +487,7 @@ mod tests {
     use crate::configs::DQTableConfig;
     use crate::table::DQTable;
     use crate::tables::delta::DQDeltaTable;
-    use deltalake::logstore::default_logstore;
-    use deltalake::ObjectStore;
+    use deltalake::{logstore::default_logstore, ObjectStore};
     use object_store::memory::InMemory;
     use object_store::path::Path;
     use sqlparser::dialect::GenericDialect;
