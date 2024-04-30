@@ -198,6 +198,8 @@ impl FlightSqlService for FlightSqlServiceSimple {
         let endpoint = FlightEndpoint {
             ticket: Some(ticket),
             location: vec![loc],
+            expiration_time: None,
+            app_metadata: Default::default(),
         };
         let flight_info = FlightInfo::new()
             .try_with_schema(&schema)
@@ -255,6 +257,8 @@ impl FlightSqlService for FlightSqlServiceSimple {
         let endpoint = FlightEndpoint {
             ticket: Some(ticket),
             location: vec![loc],
+            expiration_time: None,
+            app_metadata: Default::default(),
         };
         let flight_info = FlightInfo::new()
             .try_with_schema(&schema)

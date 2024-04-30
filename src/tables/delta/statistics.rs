@@ -65,6 +65,10 @@ fn get_scalar_value_for_null(datatype: &DataType) -> Result<ScalarValue, DeltaTa
         | DataType::Duration(_)
         | DataType::Interval(_)
         | DataType::RunEndEncoded(_, _)
+        | DataType::BinaryView
+        | DataType::Utf8View
+        | DataType::LargeListView(_)
+        | DataType::ListView(_)
         | DataType::Map(_, _) => Err(DeltaTableError::Generic(format!(
             "unsupported data type for deltalake {}",
             datatype
