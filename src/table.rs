@@ -15,6 +15,7 @@ pub trait DQTable: Send + Sync {
     async fn update(&mut self) -> Result<(), Error>;
     async fn select(&mut self, statement: &Statement) -> Result<Vec<String>, Error>;
     async fn insert(&mut self, statement: &Statement) -> Result<(), Error>;
+    async fn explain(&self) -> Result<HashMap<String, String>, Error>;
 
     async fn sign(&self, files: &Vec<String>) -> Result<Vec<String>, Error>;
 
