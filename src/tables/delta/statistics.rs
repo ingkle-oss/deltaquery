@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub const STATS_TABLE_ADD_PATH: &str = "__path__";
+pub const STATS_FIELD_SUFFIX_MAX: &str = "max";
 
 fn get_scalar_value_for_null(datatype: &DataType) -> Result<ScalarValue, DeltaTableError> {
     match datatype {
@@ -242,7 +243,7 @@ pub fn get_record_batch_from_actions(
                         }
                     }
                     if stats.max_values.contains_key(field.name()) {
-                        let name = [field.name(), "max"].join(".");
+                        let name = [field.name(), STATS_FIELD_SUFFIX_MAX].join(".");
                         let value = stats
                             .max_values
                             .get(field.name())
@@ -363,6 +364,30 @@ pub fn get_record_batch_from_actions(
                 }
             }
         }
+        if let Action::Remove(remove) = action {
+            match columns.get_mut(STATS_TABLE_ADD_PATH) {
+                Some(paths) => {
+                    match paths.iter().position(|path| path.to_string() == remove.path) {
+                        Some(idx) => {
+                            for field in &fields {
+                                match columns.get_mut(field.name()) {
+                                    Some(r) => {
+                                        r.remove(idx);
+                                    }
+                                    None => {},
+                                };
+                            }
+                        },
+                        None => {
+                            // TODO:
+                            // The removing target is not found
+                        },
+                    };
+                },
+                None => {
+                }
+            };
+        }
     }
 
     if columns.is_empty() {
@@ -377,6 +402,10 @@ pub fn get_record_batch_from_actions(
             }
         }
 
-        Ok(RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?)
+        if arrays.is_empty() {
+            Ok(RecordBatch::new_empty(Arc::new(Schema::new(fields))))
+        } else {
+            Ok(RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?)
+        }
     }
 }
