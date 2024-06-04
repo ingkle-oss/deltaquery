@@ -228,6 +228,10 @@ impl DQDeltaTable {
 
         Ok(())
     }
+
+    async fn peek_commit(&self, version: i64) -> Result<Vec<Action>, Error> {
+        Ok(delta::peek_commit(&self.store, version).await?)
+    }
 }
 
 #[async_trait]
@@ -407,6 +411,25 @@ impl DQTable for DQDeltaTable {
 
     async fn insert(&mut self, _statement: &Statement) -> Result<(), Error> {
         Ok(())
+    }
+
+    async fn explain(&self) -> Result<HashMap<String, String>, Error> {
+        let mut states = HashMap::new();
+
+        states.insert("version".to_string(), format!("{}", self.version));
+        states.insert(
+            "commits".to_string(),
+            serde_json::to_string(&self.peek_commit(self.version).await?)?,
+        );
+        states.insert("schema".to_string(), serde_json::to_string(&self.schema)?);
+        states.insert(
+            "partitions".to_string(),
+            serde_json::to_string(&self.partitions)?,
+        );
+        states.insert("location".to_string(), self.location.clone());
+        states.extend(self.filesystem_options.clone());
+
+        Ok(states)
     }
 
     async fn sign(&self, files: &Vec<String>) -> Result<Vec<String>, Error> {
