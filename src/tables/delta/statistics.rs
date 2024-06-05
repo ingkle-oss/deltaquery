@@ -130,7 +130,7 @@ pub fn get_record_batch_from_actions(
     timestamp_field: Option<&String>,
     timestamp_template: &String,
     timestamp_duration: &Duration,
-) -> Result<RecordBatch, Error> {
+) -> Result<Option<RecordBatch>, Error> {
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
     let mut fields = Vec::new();
 
@@ -366,7 +366,7 @@ pub fn get_record_batch_from_actions(
     }
 
     if columns.is_empty() {
-        Ok(RecordBatch::new_empty(Arc::new(Schema::new(fields))))
+        Ok(None)
     } else {
         let mut arrays = Vec::new();
         for field in fields.iter() {
@@ -377,6 +377,9 @@ pub fn get_record_batch_from_actions(
             }
         }
 
-        Ok(RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?)
+        Ok(Some(RecordBatch::try_new(
+            Arc::new(Schema::new(fields)),
+            arrays,
+        )?))
     }
 }

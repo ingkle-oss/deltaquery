@@ -177,20 +177,21 @@ impl DQDeltaTable {
 
     fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), Error> {
         if let Some(schema) = &self.schema {
-            let batch = statistics::get_record_batch_from_actions(
+            if let Some(batch) = statistics::get_record_batch_from_actions(
                 &actions,
                 schema,
                 self.timestamp_field.as_ref(),
                 &self.timestamp_template,
                 &self.timestamp_duration,
-            )?;
-            self.stats.push(batch);
+            )? {
+                self.stats.push(batch);
 
-            if self.stats.len() > self.max_stats_batches {
-                self.stats = vec![arrow::compute::concat_batches(
-                    &self.stats.first().unwrap().schema(),
-                    &self.stats,
-                )?];
+                if self.stats.len() > self.max_stats_batches {
+                    self.stats = vec![arrow::compute::concat_batches(
+                        &self.stats.first().unwrap().schema(),
+                        &self.stats,
+                    )?];
+                }
             }
         }
 
