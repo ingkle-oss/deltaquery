@@ -1,5 +1,10 @@
 use anyhow::Error;
-use arrow::array::RecordBatch;
+use arrow::array::{
+    ArrayRef, BooleanArray, Date32Array, Date64Array, Float32Array, Float64Array, Int16Array,
+    Int32Array, Int64Array, Int8Array, ListArray, RecordBatch, StringArray, StructArray,
+    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+    TimestampSecondArray, UInt16Array, UInt32Array, UInt64Array, UInt8Array,
+};
 use arrow::compute::{cast_with_options, CastOptions};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use datafusion::common::scalar::ScalarValue;
@@ -126,13 +131,38 @@ fn get_scalar_value(
 pub fn get_record_batch_from_actions(
     actions: &Vec<Action>,
     schema: &SchemaRef,
+    partitions: &Vec<String>,
 ) -> Result<Option<RecordBatch>, Error> {
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
     let mut fields = Vec::new();
 
+    for field in schema.fields().iter() {
+        fields.push(Arc::new(Field::new(
+            field.name(),
+            field.data_type().clone(),
+            true,
+        )));
+
+        if !partitions.contains(field.name()) {
+            fields.push(Arc::new(Field::new(
+                &[field.name(), "max"].join("."),
+                field.data_type().clone(),
+                true,
+            )));
+        }
+    }
+
+    fields.push(Arc::new(Field::new(
+        STATS_TABLE_ADD_PATH,
+        DataType::Utf8,
+        true,
+    )));
+
+    let mut rows = 0;
+
     for action in actions {
         if let Action::Add(add) = action {
-            let partitions = &add.partition_values;
+            let parts = &add.partition_values;
             let stats: Option<Stats> = match &add.stats {
                 Some(stats) => match serde_json::from_str(stats) {
                     Ok(stats) => Some(stats),
@@ -143,9 +173,10 @@ pub fn get_record_batch_from_actions(
             for field in schema.fields().iter() {
                 let data_type = field.data_type();
 
-                if partitions.contains_key(field.name()) {
+                if partitions.contains(field.name()) {
                     let name = field.name().clone();
-                    let value = match partitions.get(field.name()).unwrap() {
+
+                    let value = match parts.get(field.name()).unwrap() {
                         Some(value) => Value::String(value.to_string()),
                         None => Value::Null,
                     };
@@ -166,87 +197,76 @@ pub fn get_record_batch_from_actions(
                             let mut values = Vec::new();
                             values.push(value);
 
-                            fields.push(Arc::new(Field::new(
-                                &name,
-                                field.data_type().clone(),
-                                false,
-                            )));
-
                             columns.insert(name, values);
                         }
                     }
                 } else if let Some(stats) = stats.as_ref() {
-                    if stats.min_values.contains_key(field.name()) {
-                        let name = field.name().clone();
-                        let value = stats
+                    let name_min = field.name().clone();
+                    let name_max = [field.name(), "max"].join(".");
+
+                    let value_min = if stats.min_values.contains_key(field.name()) {
+                        stats
                             .min_values
                             .get(field.name())
                             .unwrap()
                             .as_value()
-                            .unwrap();
-
-                        let value = get_scalar_value(&value, data_type)
-                            .ok()
-                            .flatten()
-                            .unwrap_or(
-                                get_scalar_value_for_null(data_type)
-                                    .expect("could not determine null type"),
-                            );
-
-                        match columns.get_mut(&name) {
-                            Some(values) => {
-                                values.push(value.clone());
-                            }
-                            None => {
-                                let mut values = Vec::new();
-                                values.push(value.clone());
-
-                                fields.push(Arc::new(Field::new(
-                                    &name,
-                                    field.data_type().clone(),
-                                    field.is_nullable(),
-                                )));
-
-                                columns.insert(name, values);
-                            }
-                        }
-                    }
-                    if stats.max_values.contains_key(field.name()) {
-                        let name = [field.name(), "max"].join(".");
-                        let value = stats
+                            .unwrap()
+                            .clone()
+                    } else {
+                        Value::Null
+                    };
+                    let value_max = if stats.max_values.contains_key(field.name()) {
+                        stats
                             .max_values
                             .get(field.name())
                             .unwrap()
                             .as_value()
-                            .unwrap();
+                            .unwrap()
+                            .clone()
+                    } else {
+                        Value::Null
+                    };
 
-                        let value = get_scalar_value(&value, data_type)
-                            .ok()
-                            .flatten()
-                            .unwrap_or(
-                                get_scalar_value_for_null(data_type)
-                                    .expect("could not determine null type"),
-                            );
+                    let value_min = get_scalar_value(&value_min, data_type)
+                        .ok()
+                        .flatten()
+                        .unwrap_or(
+                            get_scalar_value_for_null(data_type)
+                                .expect("could not determine null type"),
+                        );
 
-                        match columns.get_mut(&name) {
-                            Some(values) => {
-                                values.push(value.clone());
-                            }
-                            None => {
-                                let mut values = Vec::new();
-                                values.push(value.clone());
+                    match columns.get_mut(&name_min) {
+                        Some(values) => {
+                            values.push(value_min);
+                        }
+                        None => {
+                            let mut values = Vec::new();
+                            values.push(value_min);
 
-                                fields.push(Arc::new(Field::new(
-                                    &name,
-                                    field.data_type().clone(),
-                                    field.is_nullable(),
-                                )));
-
-                                columns.insert(name, values);
-                            }
+                            columns.insert(name_min, values);
                         }
                     }
-                }
+
+                    let value_max = get_scalar_value(&value_max, data_type)
+                        .ok()
+                        .flatten()
+                        .unwrap_or(
+                            get_scalar_value_for_null(data_type)
+                                .expect("could not determine null type"),
+                        );
+
+                    match columns.get_mut(&name_max) {
+                        Some(values) => {
+                            values.push(value_max);
+                        }
+                        None => {
+                            let mut values = Vec::new();
+                            values.push(value_max);
+
+                            columns.insert(name_max, values);
+                        }
+                    }
+                };
             }
 
             match columns.get_mut(STATS_TABLE_ADD_PATH) {
@@ -257,27 +277,64 @@ pub fn get_record_batch_from_actions(
                     let mut values = Vec::new();
                     values.push(ScalarValue::Utf8(Some(add.path.to_string())));
 
-                    fields.push(Arc::new(Field::new(
-                        STATS_TABLE_ADD_PATH,
-                        DataType::Utf8,
-                        false,
-                    )));
-
                     columns.insert(STATS_TABLE_ADD_PATH.into(), values);
                 }
             }
+
+            rows = rows + 1;
         }
     }
 
-    if columns.is_empty() {
+    if rows == 0 {
         Ok(None)
     } else {
         let mut arrays = Vec::new();
+
         for field in fields.iter() {
             if let Some(values) = columns.remove(field.name()) {
-                if let Some(array) = ScalarValue::iter_to_array(values).ok() {
-                    arrays.push(array);
-                }
+                let array = ScalarValue::iter_to_array(values).expect("could not convert array");
+                arrays.push(array);
+            } else {
+                let array = match field.data_type() {
+                    DataType::Boolean => Arc::new(BooleanArray::new_null(rows)) as ArrayRef,
+                    DataType::Int64 => Arc::new(Int64Array::new_null(rows)) as ArrayRef,
+                    DataType::Int32 => Arc::new(Int32Array::new_null(rows)) as ArrayRef,
+                    DataType::Int16 => Arc::new(Int16Array::new_null(rows)) as ArrayRef,
+                    DataType::Int8 => Arc::new(Int8Array::new_null(rows)) as ArrayRef,
+                    DataType::UInt64 => Arc::new(UInt64Array::new_null(rows)) as ArrayRef,
+                    DataType::UInt32 => Arc::new(UInt32Array::new_null(rows)) as ArrayRef,
+                    DataType::UInt16 => Arc::new(UInt16Array::new_null(rows)) as ArrayRef,
+                    DataType::UInt8 => Arc::new(UInt8Array::new_null(rows)) as ArrayRef,
+                    DataType::Float64 => Arc::new(Float64Array::new_null(rows)) as ArrayRef,
+                    DataType::Float32 => Arc::new(Float32Array::new_null(rows)) as ArrayRef,
+                    DataType::Date64 => Arc::new(Date64Array::new_null(rows)) as ArrayRef,
+                    DataType::Date32 => Arc::new(Date32Array::new_null(rows)) as ArrayRef,
+                    DataType::Utf8 => Arc::new(StringArray::new_null(rows)) as ArrayRef,
+                    DataType::LargeUtf8 => Arc::new(StringArray::new_null(rows)) as ArrayRef,
+                    DataType::Timestamp(unit, _) => match unit {
+                        TimeUnit::Second => {
+                            Arc::new(TimestampSecondArray::new_null(rows)) as ArrayRef
+                        }
+                        TimeUnit::Millisecond => {
+                            Arc::new(TimestampMillisecondArray::new_null(rows)) as ArrayRef
+                        }
+                        TimeUnit::Microsecond => {
+                            Arc::new(TimestampMicrosecondArray::new_null(rows)) as ArrayRef
+                        }
+                        TimeUnit::Nanosecond => {
+                            Arc::new(TimestampNanosecondArray::new_null(rows)) as ArrayRef
+                        }
+                    },
+                    DataType::List(field) => {
+                        Arc::new(ListArray::new_null(field.clone(), rows)) as ArrayRef
+                    }
+                    DataType::Struct(fields) => {
+                        Arc::new(StructArray::new_null(fields.clone(), rows)) as ArrayRef
+                    }
+                    _ => unimplemented!(),
+                };
+
+                arrays.push(array);
             }
         }
 

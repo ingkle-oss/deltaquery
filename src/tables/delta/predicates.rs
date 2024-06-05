@@ -51,9 +51,14 @@ pub fn parse_expression(
 
                 if let (Some(min), Some(max), Some(right)) = (min, max, right) {
                     if min == max {
-                        Some(min.eq(right))
+                        Some(min.clone().is_null().or(min.eq(right)))
                     } else {
-                        Some(min.lt_eq(right.clone()).and(max.gt_eq(right)))
+                        Some(
+                            min.clone().is_null().or(max
+                                .clone()
+                                .is_null()
+                                .or(min.lt_eq(right.clone()).and(max.gt_eq(right)))),
+                        )
                     }
                 } else {
                     None
@@ -64,7 +69,7 @@ pub fn parse_expression(
                 let right = parse_expression(tables, from, fields, right, false, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
-                    Some(left.lt(right))
+                    Some(left.clone().is_null().or(left.lt(right)))
                 } else {
                     None
                 }
@@ -74,7 +79,7 @@ pub fn parse_expression(
                 let right = parse_expression(tables, from, fields, right, false, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
-                    Some(left.lt_eq(right))
+                    Some(left.clone().is_null().or(left.lt_eq(right)))
                 } else {
                     None
                 }
@@ -84,7 +89,7 @@ pub fn parse_expression(
                 let right = parse_expression(tables, from, fields, right, true, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
-                    Some(left.gt(right))
+                    Some(left.clone().is_null().or(left.gt(right)))
                 } else {
                     None
                 }
@@ -94,7 +99,7 @@ pub fn parse_expression(
                 let right = parse_expression(tables, from, fields, right, true, left.as_ref());
 
                 if let (Some(left), Some(right)) = (left, right) {
-                    Some(left.gt_eq(right))
+                    Some(left.clone().is_null().or(left.gt_eq(right)))
                 } else {
                     None
                 }
@@ -114,9 +119,19 @@ pub fn parse_expression(
 
             if let (Some(min), Some(max), Some(low), Some(high)) = (min, max, low, high) {
                 if *negated {
-                    Some(min.gt(high).or(max.lt(low)))
+                    Some(
+                        min.clone()
+                            .is_null()
+                            .or(min.gt(high))
+                            .or(max.clone().is_null().or(max.lt(low))),
+                    )
                 } else {
-                    Some(min.lt_eq(high).and(max.gt_eq(low)))
+                    Some(
+                        min.clone()
+                            .is_null()
+                            .or(min.lt_eq(high))
+                            .and(max.clone().is_null().or(max.gt_eq(low))),
+                    )
                 }
             } else {
                 None
