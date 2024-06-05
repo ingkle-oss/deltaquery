@@ -51,14 +51,16 @@ pub fn create_protocol_action(max_reader: Option<i32>, max_writer: Option<i32>) 
 }
 
 pub fn create_metadata_action(
+    columns: Vec<String>,
     parttiton_columns: Option<Vec<String>>,
     configuration: Option<HashMap<String, Option<String>>>,
 ) -> Action {
-    let table_schema = StructType::new(vec![StructField::new(
-        "value".to_string(),
-        DataType::Primitive(PrimitiveType::Integer),
-        true,
-    )]);
+    let table_schema = StructType::new(
+        columns
+            .iter()
+            .map(|column| StructField::new(column, DataType::Primitive(PrimitiveType::Long), true))
+            .collect::<Vec<_>>(),
+    );
     Action::Metadata(
         Metadata::try_new(
             table_schema,
