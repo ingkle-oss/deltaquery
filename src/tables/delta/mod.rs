@@ -168,10 +168,17 @@ impl DQDeltaTable {
                 self.stats.push(batch);
 
                 if self.stats.len() > self.max_stats_batches {
-                    self.stats = vec![arrow::compute::concat_batches(
+                    match arrow::compute::concat_batches(
                         &self.stats.last().unwrap().schema(),
                         &self.stats,
-                    )?];
+                    ) {
+                        Ok(batch) => {
+                            self.stats = vec![batch];
+                        }
+                        Err(err) => {
+                            log::error!("could not concat batches: {:?}", err);
+                        }
+                    }
                 }
             }
         }
