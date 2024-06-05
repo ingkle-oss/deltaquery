@@ -162,7 +162,9 @@ impl DQDeltaTable {
 
     fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), Error> {
         if let Some(schema) = &self.schema {
-            if let Some(batch) = statistics::get_record_batch_from_actions(&actions, schema)? {
+            if let Some(batch) =
+                statistics::get_record_batch_from_actions(&actions, schema, &self.partitions)?
+            {
                 self.stats.push(batch);
 
                 if self.stats.len() > self.max_stats_batches {
