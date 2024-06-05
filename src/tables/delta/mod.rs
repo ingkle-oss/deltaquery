@@ -169,7 +169,7 @@ impl DQDeltaTable {
 
                 if self.stats.len() > self.max_stats_batches {
                     self.stats = vec![arrow::compute::concat_batches(
-                        &self.stats.first().unwrap().schema(),
+                        &self.stats.last().unwrap().schema(),
                         &self.stats,
                     )?];
                 }
@@ -250,7 +250,7 @@ impl DQTable for DQDeltaTable {
                 if let SetExpr::Select(select) = query.body.as_ref() {
                     let mut has_filters = false;
 
-                    if let (Some(selection), Some(batch0)) = (&select.selection, self.stats.first())
+                    if let (Some(selection), Some(batch0)) = (&select.selection, self.stats.last())
                     {
                         let mut expressions = Vec::new();
 
@@ -512,7 +512,7 @@ mod tests {
         let tmp_path = Path::from("_delta_log/tmp");
 
         let protocol = tests::create_protocol_action(None, None);
-        let metadata = tests::create_metadata_action(None, None);
+        let metadata = tests::create_metadata_action(vec!["value".into()], None, None);
         let commit0 = tests::get_commit_bytes(&vec![protocol, metadata]).unwrap();
         store.put(&tmp_path, commit0).await.unwrap();
         log_store.write_commit_entry(0, &tmp_path).await.unwrap();
@@ -566,7 +566,7 @@ mod tests {
         let tmp_path = Path::from("_delta_log/tmp");
 
         let protocol = tests::create_protocol_action(None, None);
-        let metadata = tests::create_metadata_action(None, None);
+        let metadata = tests::create_metadata_action(vec!["value".into()], None, None);
         let commit0 = tests::get_commit_bytes(&vec![protocol, metadata]).unwrap();
         store.put(&tmp_path, commit0).await.unwrap();
         log_store.write_commit_entry(0, &tmp_path).await.unwrap();
@@ -615,5 +615,62 @@ mod tests {
                 .unwrap_or(0),
             2
         );
+    }
+
+    #[tokio::test]
+    async fn test_schema_evolution() {
+        let store = Arc::new(InMemory::new());
+        let log_store = default_logstore(
+            store.clone(),
+            &Url::parse("mem://test0").unwrap(),
+            &HashMap::new().into(),
+        );
+
+        let tmp_path = Path::from("_delta_log/tmp");
+
+        let protocol = tests::create_protocol_action(None, None);
+        let metadata = tests::create_metadata_action(vec!["value".into()], None, None);
+        let commit0 = tests::get_commit_bytes(&vec![protocol, metadata]).unwrap();
+        store.put(&tmp_path, commit0).await.unwrap();
+        log_store.write_commit_entry(0, &tmp_path).await.unwrap();
+
+        let config = DQTableConfig {
+            name: "test0".into(),
+            r#type: "external".into(),
+            storage: "delta".into(),
+            location: "memory://".into(),
+            partitions: None,
+            options: None,
+            created_at: None,
+            updated_at: None,
+        };
+        let mut storage = DQDeltaTable::try_new(&config).await.unwrap();
+        storage = storage.with_store(log_store.clone());
+
+        let add0 = tests::create_add_action("file0", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":10},\"nullCount\":{\"value\":0}}".into()));
+        let add1 = tests::create_add_action("file1", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1},\"maxValues\":{\"value\":100},\"nullCount\":{\"value\":0}}".into()));
+        let add2 = tests::create_add_action("file2", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":0},\"maxValues\":{\"value\":3},\"nullCount\":{\"value\":0}}".into()));
+        let commit1 = tests::get_commit_bytes(&vec![add0, add1, add2]).unwrap();
+        store.put(&tmp_path, commit1).await.unwrap();
+        log_store.write_commit_entry(1, &tmp_path).await.unwrap();
+
+        storage.update().await.unwrap();
+
+        let metadata =
+            tests::create_metadata_action(vec!["value".into(), "score".into()], None, None);
+        let add3 = tests::create_add_action("file3", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1,\"score\":10},\"maxValues\":{\"value\":10,\"score\":100},\"nullCount\":{\"value\":0,\"score\":0}}".into()));
+        let add4 = tests::create_add_action("file4", true, Some("{\"numRecords\":10,\"minValues\":{\"value\":1,\"score\":10},\"maxValues\":{\"value\":100,\"score\":100},\"nullCount\":{\"value\":0,\"score\":0}}".into()));
+        let commit2 = tests::get_commit_bytes(&vec![metadata, add3, add4]).unwrap();
+        store.put(&tmp_path, commit2).await.unwrap();
+        log_store.write_commit_entry(2, &tmp_path).await.unwrap();
+
+        storage.update().await.unwrap();
+
+        let dialect = GenericDialect {};
+
+        let statements =
+            Parser::parse_sql(&dialect, "select * from test0 where score >= 10").unwrap();
+        let files = storage.select(statements.first().unwrap()).await.unwrap();
+        assert_eq!(files.len(), 2);
     }
 }
