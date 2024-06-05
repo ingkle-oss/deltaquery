@@ -2,7 +2,6 @@ use anyhow::Error;
 use arrow::array::RecordBatch;
 use arrow::compute::{cast_with_options, CastOptions};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
-use chrono::{DateTime, Duration};
 use datafusion::common::scalar::ScalarValue;
 use datafusion::common::DataFusionError;
 use deltalake::kernel::Action;
@@ -127,38 +126,9 @@ fn get_scalar_value(
 pub fn get_record_batch_from_actions(
     actions: &Vec<Action>,
     schema: &SchemaRef,
-    timestamp_field: Option<&String>,
-    timestamp_template: &String,
-    timestamp_duration: &Duration,
-) -> Result<RecordBatch, Error> {
+) -> Result<Option<RecordBatch>, Error> {
     let mut columns = HashMap::<String, Vec<ScalarValue>>::new();
     let mut fields = Vec::new();
-
-    let mut tera = tera::Tera::default();
-
-    let timestamp_variables = match timestamp_field {
-        Some(field) => {
-            let _ = tera.add_raw_template(field, &timestamp_template)?;
-            let template = tera.get_template(field)?;
-
-            let mut variables = Vec::new();
-
-            for node in &template.ast {
-                match node {
-                    tera::ast::Node::VariableBlock(_, expr) => match &expr.val {
-                        tera::ast::ExprVal::Ident(ident) => {
-                            variables.push(ident.clone());
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
-            }
-
-            variables
-        }
-        None => vec![],
-    };
 
     for action in actions {
         if let Action::Add(add) = action {
@@ -279,72 +249,6 @@ pub fn get_record_batch_from_actions(
                 }
             }
 
-            if let Some(field) = timestamp_field {
-                let name_min = field.clone();
-                let name_max = [field, "max"].join(".");
-
-                let mut context = tera::Context::new();
-
-                for variable in &timestamp_variables {
-                    if let Some(Some(value)) = partitions.get(variable) {
-                        context.insert(variable, value);
-                    }
-                }
-
-                let content = tera.render(field, &context)?;
-
-                let value_min = DateTime::parse_from_str(&content, "%Y-%m-%d %H:%M:%S %z")?;
-                let value_max = value_min + *timestamp_duration;
-
-                match columns.get_mut(&name_min) {
-                    Some(values) => {
-                        values.push(ScalarValue::TimestampMicrosecond(
-                            Some(value_min.timestamp_micros()),
-                            None,
-                        ));
-                    }
-                    None => {
-                        let mut values = Vec::new();
-                        values.push(ScalarValue::TimestampMicrosecond(
-                            Some(value_min.timestamp_micros()),
-                            None,
-                        ));
-
-                        fields.push(Arc::new(Field::new(
-                            &name_min,
-                            DataType::Timestamp(TimeUnit::Microsecond, None),
-                            false,
-                        )));
-
-                        columns.insert(name_min, values);
-                    }
-                }
-
-                match columns.get_mut(&name_max) {
-                    Some(values) => {
-                        values.push(ScalarValue::TimestampMicrosecond(
-                            Some(value_max.timestamp_micros()),
-                            None,
-                        ));
-                    }
-                    None => {
-                        let mut values = Vec::new();
-                        values.push(ScalarValue::TimestampMicrosecond(
-                            Some(value_max.timestamp_micros()),
-                            None,
-                        ));
-
-                        fields.push(Arc::new(Field::new(
-                            &name_max,
-                            DataType::Timestamp(TimeUnit::Microsecond, None),
-                            false,
-                        )));
-
-                        columns.insert(name_max, values);
-                    }
-                }
-            }
-
             match columns.get_mut(STATS_TABLE_ADD_PATH) {
                 Some(values) => {
                     values.push(ScalarValue::Utf8(Some(add.path.to_string())));
@@ -366,7 +270,7 @@ pub fn get_record_batch_from_actions(
     }
 
     if columns.is_empty() {
-        Ok(RecordBatch::new_empty(Arc::new(Schema::new(fields))))
+        Ok(None)
     } else {
         let mut arrays = Vec::new();
         for field in fields.iter() {
@@ -377,6 +281,9 @@ pub fn get_record_batch_from_actions(
             }
         }
 
-        Ok(RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)?)
+        Ok(Some(RecordBatch::try_new(
+            Arc::new(Schema::new(fields)),
+            arrays,
+        )?))
     }
 }
