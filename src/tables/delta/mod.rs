@@ -8,7 +8,6 @@ use arrow::array::cast::AsArray;
 use arrow::array::RecordBatch;
 use arrow::datatypes::{Schema, SchemaRef};
 use async_trait::async_trait;
-use chrono::Duration as ChronoDuration;
 use datafusion::common::cast::as_string_array;
 use datafusion::common::scalar::ScalarValue;
 use datafusion::common::ToDFSchema;
@@ -60,10 +59,6 @@ pub struct DQDeltaTable {
     max_stats_batches: usize,
     use_versioning: bool,
 
-    timestamp_field: Option<String>,
-    timestamp_template: String,
-    timestamp_duration: ChronoDuration,
-
     filesystem_options: HashMap<String, String>,
     table_options: HashMap<String, String>,
     data_format: String,
@@ -110,16 +105,6 @@ impl DQDeltaTable {
             max_stats_batches: options.get("max_stats_batches").map_or(32, |v| {
                 v.parse().expect("could not parse max_stats_batches")
             }),
-            timestamp_field: options.get("timestamp_field").cloned(),
-            timestamp_template: options
-                .get("timestamp_template")
-                .map_or(String::from("{{ date }} {{ hour }}:00:00 +00:00"), |v| {
-                    v.clone()
-                }),
-            timestamp_duration: options.get("timestamp_duration").map_or(
-                ChronoDuration::try_hours(1).expect("could not get chrono duration"),
-                |v| duration_str::parse_chrono(v).expect("could not parse timestamp_duration"),
-            ),
             filesystem_options: options.clone(),
             table_options: HashMap::new(),
             data_format: "parquet".into(),
@@ -177,13 +162,7 @@ impl DQDeltaTable {
 
     fn update_stats(&mut self, actions: &Vec<Action>) -> Result<(), Error> {
         if let Some(schema) = &self.schema {
-            if let Some(batch) = statistics::get_record_batch_from_actions(
-                &actions,
-                schema,
-                self.timestamp_field.as_ref(),
-                &self.timestamp_template,
-                &self.timestamp_duration,
-            )? {
+            if let Some(batch) = statistics::get_record_batch_from_actions(&actions, schema)? {
                 self.stats.push(batch);
 
                 if self.stats.len() > self.max_stats_batches {
