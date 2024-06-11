@@ -47,7 +47,7 @@ sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "jso
 duckdb = { version = "0.10.1", features = ["appender-arrow"], optional = true }
 sqlparser = { version = "0.39", features = ["serde", "visitor"] }
 datafusion = { version = "37" }
-deltalake = { git = "https://github.com/delta-io/delta-rs", features = ["default", "datafusion", "s3"] }
+deltalake = { version = "0.17", features = ["default", "datafusion", "s3"] }
 object_store = { version = "0.9" }
 aws-config = { version = "1" }
 aws-credential-types = { version = "1" }
